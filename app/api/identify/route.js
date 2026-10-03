@@ -33,6 +33,7 @@ export async function POST(req) {
         nameGuesses: nameGuesses || [],
         number: numberGuess ? `${numberGuess.padded}${numberGuess.total ? '/' + numberGuess.total : ''}` : '',
         numberGuesses: numberGuesses || [],
+        attackGuesses: attackGuesses || [],
       },
       candidates,
       ...(process.env.DEBUG_OCR ? { debug } : {}),
