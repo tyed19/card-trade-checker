@@ -102,6 +102,33 @@ export async function GET(req) {
         },
       });
     }
+    if (searchParams.get('diag') === 'tessworker') {
+      // Spawn tesseract's actual worker script and listen for its death:
+      // createWorker never surfaces worker 'error' events, so a worker
+      // that dies at require-time looks exactly like an init hang.
+      const { Worker } = await import('node:worker_threads');
+      const path = await import('node:path');
+      const fs = await import('node:fs');
+      const script = path.join(process.cwd(), 'node_modules', 'tesseract.js', 'src', 'worker-script', 'node', 'index.js');
+      const events = await new Promise((resolve) => {
+        const seen = [];
+        let w;
+        try {
+          w = new Worker(script);
+        } catch (err) { resolve(['spawn-threw: ' + String(err && err.message || err)]); return; }
+        const timer = setTimeout(() => { seen.push('still-alive-after-6s'); try { w.terminate(); } catch {} resolve(seen); }, 6000);
+        w.once('error', (err) => { seen.push('error: ' + String(err && err.message || err)); });
+        w.once('exit', (code) => { seen.push('exit: ' + code); clearTimeout(timer); resolve(seen); });
+        w.once('online', () => seen.push('online'));
+      });
+      // Also verify the worker graph's external deps resolve from here.
+      const req = (await import('node:module')).createRequire(import.meta.url);
+      const deps = {};
+      for (const dep of ['wasm-feature-detect', 'zlibjs', 'bmp-js', 'node-fetch', 'tesseract.js-core/tesseract-core-simd-lstm.js', 'tesseract.js/src/worker-script/index.js']) {
+        try { deps[dep] = req.resolve(dep); } catch (err) { deps[dep] = 'FAIL: ' + String(err && err.message || err).slice(0, 120); }
+      }
+      return NextResponse.json({ ok: true, diag: { script, scriptExists: fs.existsSync(script), workerEvents: events, deps } });
+    }
     const nameGuess = searchParams.get('name') || '';
     const numberGuess = parseNumberParam(searchParams.get('number'));
     if (!nameGuess && !numberGuess) {
