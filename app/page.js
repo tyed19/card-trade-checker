@@ -28,6 +28,28 @@ function speak(text) {
 
 const emptySide = () => ({ cards: [], pending: null, busy: false, status: '' });
 
+// Shrink big phone photos before upload: full-size images made the
+// server OCR blow its time limit (the live 504s). Card bands are read
+// from relative positions, so 1400px wide loses nothing and is ~4x
+// less data to upload, decode, and slice.
+async function shrinkForUpload(file) {
+  try {
+    if (!file || !file.type || !file.type.startsWith('image/')) return file;
+    const bmp = await createImageBitmap(file);
+    const MAX = 1400;
+    if (Math.max(bmp.width, bmp.height) <= MAX) { bmp.close?.(); return file; }
+    const scale = MAX / Math.max(bmp.width, bmp.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    bmp.close?.();
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+    if (!blob) return file;
+    return new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+  } catch { return file; }
+}
+
 export default function Home() {
   const [sides, setSides] = useState({ mine: emptySide(), theirs: emptySide() });
   const [verdict, setVerdict] = useState(null);
@@ -44,8 +66,9 @@ export default function Home() {
     setSide(side, { busy: true, status: '🔎 Looking at your card…' });
     speak('Looking at your card');
     try {
+      const upload = await shrinkForUpload(file);
       const form = new FormData();
-      form.append('photo', file);
+      form.append('photo', upload);
       const res = await fetch('/api/identify', { method: 'POST', body: form });
       const json = await res.json();
       if (json.ok && json.candidates && json.candidates.length) {

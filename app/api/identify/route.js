@@ -17,6 +17,7 @@ function parseNumberParam(raw) {
 }
 
 export async function POST(req) {
+  const t0 = Date.now();
   try {
     const form = await req.formData();
     const file = form.get('photo');
@@ -24,8 +25,32 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'No photo received' }, { status: 400 });
     }
     const buffer = Buffer.from(await file.arrayBuffer());
-    const { nameGuess, nameGuesses, numberGuess, numberGuesses, attackGuesses, debug } = await readCardPhoto(buffer);
-    const candidates = await findCandidates({ nameGuess, nameGuesses, numberGuess, numberGuesses, attackGuesses, photoBuffer: buffer });
+    // Hard deadline comfortably inside the platform cap (maxDuration 60):
+    // if the pipeline is having a slow day, answer with structured JSON
+    // the client can act on instead of dying as a platform 504 page
+    // (which is what "Something went wrong" on the phone actually was).
+    const DEADLINE_MS = parseInt(process.env.IDENTIFY_DEADLINE_MS || '50000', 10) || 50000;
+    let timer = null;
+    const work = (async () => {
+      const reading = await readCardPhoto(buffer);
+      const ocrMs = Date.now() - t0;
+      const candidates = await findCandidates({ ...reading, photoBuffer: buffer });
+      return { reading, candidates, ocrMs };
+    })();
+    const timeout = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(null), Math.max(1000, DEADLINE_MS - (Date.now() - t0)));
+    });
+    const done = await Promise.race([work, timeout]);
+    clearTimeout(timer);
+    if (!done) {
+      return NextResponse.json({
+        ok: false, error: 'slow', retry: true,
+        detail: `Identification exceeded ${DEADLINE_MS}ms budget`,
+        timing: { totalMs: Date.now() - t0 },
+      });
+    }
+    const { reading, candidates, ocrMs } = done;
+    const { nameGuess, nameGuesses, numberGuess, numberGuesses, attackGuesses, debug } = reading;
     return NextResponse.json({
       ok: true,
       ocr: {
@@ -36,10 +61,14 @@ export async function POST(req) {
         attackGuesses: attackGuesses || [],
       },
       candidates,
+      timing: { ocrMs, totalMs: Date.now() - t0 },
       ...(process.env.DEBUG_OCR ? { debug } : {}),
     });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: String(err && err.message || err) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: 'identify-failed', debugError: String(err && err.message || err), timing: { totalMs: Date.now() - t0 } },
+      { status: 500 }
+    );
   }
 }
 
@@ -55,6 +84,9 @@ export async function GET(req) {
     const candidates = await findCandidates({ nameGuess, numberGuess });
     return NextResponse.json({ ok: true, candidates });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: String(err && err.message || err) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: 'identify-failed', debugError: String(err && err.message || err) },
+      { status: 500 }
+    );
   }
 }
