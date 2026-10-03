@@ -41,3 +41,10 @@ npm start        # http://localhost:3000
   non-glare light. Holographic glare is the main enemy.
 - Free card-book APIs occasionally fail; the server retries, and the client
   offers a spoken "try again" plus the grown-ups manual search as last resort.
+
+## Deploying
+
+No environment variables are needed. Either import this repo at
+vercel.com/new (Next.js is auto-detected) or deploy with the Vercel CLI.
+The `/api/identify` route runs the OCR workers in a Node serverless
+function (maxDuration 60s, native deps traced via next.config.mjs).
