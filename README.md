@@ -7,6 +7,9 @@ number off the photo and finds the exact print → tap ✅ YES on the matching
 picture → same for THEIR card → tap **CHECK THE TRADE** → a huge spoken
 FAIR / ALMOST FAIR / NOT FAIR verdict. No typing, no reading, no accounts.
 
+Product direction (binders, trade suggestions, set completion): see
+[ROADMAP.md](ROADMAP.md).
+
 ## How it works
 
 - `app/page.js` — the kid client (big buttons, speechSynthesis read-aloud,
