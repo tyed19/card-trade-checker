@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readCardPhoto } from '../../../lib/ocr';
+import { readCardPhoto, getStageStats } from '../../../lib/ocr';
 import { findCandidates } from '../../../lib/identify';
 
 export const runtime = 'nodejs';
@@ -47,6 +47,7 @@ export async function POST(req) {
         ok: false, error: 'slow', retry: true,
         detail: `Identification exceeded ${DEADLINE_MS}ms budget`,
         timing: { totalMs: Date.now() - t0 },
+        ocrStages: getStageStats(),
       });
     }
     const { reading, candidates, ocrMs } = done;
@@ -61,7 +62,7 @@ export async function POST(req) {
         attackGuesses: attackGuesses || [],
       },
       candidates,
-      timing: { ocrMs, totalMs: Date.now() - t0 },
+      timing: { ocrMs, totalMs: Date.now() - t0, ocrStages: reading.ocrTiming || null },
       ...(process.env.DEBUG_OCR ? { debug } : {}),
     });
   } catch (err) {
