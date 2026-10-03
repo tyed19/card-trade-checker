@@ -77,6 +77,31 @@ export async function POST(req) {
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
+    if (searchParams.get('diag') === 'worker') {
+      // Can a bare worker_thread even run in this runtime?
+      const { Worker } = await import('node:worker_threads');
+      const os = await import('node:os');
+      const result = await new Promise((resolve) => {
+        let w;
+        try {
+          w = new Worker(
+            "const { parentPort } = require('worker_threads'); parentPort.postMessage('alive');",
+            { eval: true }
+          );
+        } catch (err) { resolve('spawn-threw: ' + String(err && err.message || err)); return; }
+        const timer = setTimeout(() => { try { w.terminate(); } catch {} resolve('timeout-6s'); }, 6000);
+        w.once('message', (m) => { clearTimeout(timer); w.terminate(); resolve('ok: ' + m); });
+        w.once('error', (err) => { clearTimeout(timer); resolve('error: ' + String(err && err.message || err)); });
+      });
+      return NextResponse.json({
+        ok: true, diag: {
+          workerEval: result,
+          node: process.version, platform: process.platform,
+          cpus: os.cpus().length, cwd: process.cwd(),
+          arch: process.arch,
+        },
+      });
+    }
     const nameGuess = searchParams.get('name') || '';
     const numberGuess = parseNumberParam(searchParams.get('number'));
     if (!nameGuess && !numberGuess) {
