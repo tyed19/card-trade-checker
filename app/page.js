@@ -26,17 +26,20 @@ function speak(text) {
   } catch { /* speech is a bonus, never a blocker */ }
 }
 
-const emptySide = () => ({ cards: [], pending: null, busy: false, status: '' });
+const emptySide = () => ({ cards: [], choices: null, busy: false, status: '' });
 
 // Shrink big phone photos before upload: full-size images made the
 // server OCR blow its time limit (the live 504s). Card bands are read
-// from relative positions, so 1400px wide loses nothing and is ~4x
-// less data to upload, decode, and slice.
+// from relative positions, so shrinking loses nothing geometrically —
+// but the collector-number digits are tiny, so keep as much resolution
+// as the time budget tolerates: 1800px max dimension (a fresh iPhone
+// photo is 4032px; at the old 1400px cap the number digits landed at
+// ~15-18px tall, at 1800 they stay readable).
 async function shrinkForUpload(file) {
   try {
     if (!file || !file.type || !file.type.startsWith('image/')) return file;
     const bmp = await createImageBitmap(file);
-    const MAX = 1400;
+    const MAX = 1800;
     if (Math.max(bmp.width, bmp.height) <= MAX) { bmp.close?.(); return file; }
     const scale = MAX / Math.max(bmp.width, bmp.height);
     const canvas = document.createElement('canvas');
@@ -71,29 +74,43 @@ export default function Home() {
       form.append('photo', upload);
       const res = await fetch('/api/identify', { method: 'POST', body: form });
       const json = await res.json();
-      if (json.ok && json.candidates && json.candidates.length) {
-        setSide(side, { busy: false, pending: json.candidates[0], status: 'Is this your card? 👇' });
-        speak('Is this your card?');
-      } else {
-        setSide(side, { busy: false, status: '😕 I could not read that one. Flat + bright, try again!' });
+      // Picture choices are shown ONLY for server-gated displayable
+      // candidates. A weak guess is never presented as an answer: with
+      // no displayable candidate we go to the honest retake state.
+      const choices = json.ok && json.confident
+        ? (json.candidates || []).filter((c) => c.displayable).slice(0, 3)
+        : [];
+      if (choices.length) {
+        setSide(side, { busy: false, choices, status: 'Tap your card! 👇' });
+        speak('Tap your card!');
+      } else if (json.ok && json.stumped) {
+        // The photo read fine (a solid number) but the card book came
+        // back empty — don't blame the kid's photo for that.
+        setSide(side, { busy: false, choices: null, status: '🤔 That one stumped me! One more try!' });
+        speak('That one stumped me! Try again!');
+      } else if (json.ok) {
+        setSide(side, { busy: false, choices: null, status: '😕 I could not read that one. Flat + bright, try again!' });
         speak('I could not read that one. Try again, flat and bright!');
+      } else {
+        setSide(side, { busy: false, choices: null, status: '😕 Something went wrong. Tap TRY AGAIN!' });
+        speak('Something went wrong. Try again!');
       }
     } catch {
-      setSide(side, { busy: false, status: '😕 Something went wrong. Tap TRY AGAIN!' });
+      setSide(side, { busy: false, choices: null, status: '😕 Something went wrong. Tap TRY AGAIN!' });
       speak('Something went wrong. Try again!');
     }
   }
 
-  function confirm(side, yes) {
+  function pickChoice(side, cand) {
     const s = sides[side];
-    if (!s.pending) return;
-    if (yes) {
-      setSide(side, { cards: [...s.cards, s.pending], pending: null, status: '⭐ Got it!' });
-      speak('Got it!');
-    } else {
-      setSide(side, { pending: null, status: 'OK! Take the picture again 📸' });
-      speak('OK! Take the picture again');
-    }
+    if (!s.choices) return;
+    setSide(side, { cards: [...s.cards, cand], choices: null, status: '⭐ Got it!' });
+    speak('Got it!');
+  }
+
+  function noneOfThese(side) {
+    setSide(side, { choices: null, status: 'OK! Take the picture again 📸' });
+    speak('OK! Take the picture again');
   }
 
   function removeCard(side, idx) {
@@ -188,14 +205,17 @@ export default function Home() {
         </button>
         <div className="status">{s.status}</div>
 
-        {s.pending && (
-          <div className="pending">
-            {s.pending.image && <img src={s.pending.image} alt={s.pending.name} />}
-            <div className="q">Is this it?</div>
-            <div className="yesno">
-              <button className="yesBtn" onClick={() => confirm(side, true)}>✅ YES</button>
-              <button className="noBtn" onClick={() => confirm(side, false)}>❌ NO</button>
+        {s.choices && s.choices.length > 0 && (
+          <div className="choices">
+            <div className="q">Tap your card! 👇</div>
+            <div className={`choiceGrid${s.choices.length === 1 ? ' one' : ''}`}>
+              {s.choices.map((c, i) => (
+                <button className="choiceBtn" key={c.id + '-' + i} onClick={() => pickChoice(side, c)}>
+                  {c.image && <img src={c.image} alt={c.name} />}
+                </button>
+              ))}
             </div>
+            <button className="noneBtn" onClick={() => noneOfThese(side)}>🚫 NONE OF THESE</button>
           </div>
         )}
 

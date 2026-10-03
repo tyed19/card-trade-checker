@@ -52,8 +52,19 @@ export async function POST(req) {
     }
     const { reading, candidates, ocrMs } = done;
     const { nameGuess, nameGuesses, numberGuess, numberGuesses, attackGuesses, debug } = reading;
+    // Confidence gate verdict: at least one candidate carries structural
+    // evidence (see applyGate in lib/identify.js). When none does, the
+    // client shows the retake state and never a card picture.
+    const confident = candidates.some((c) => c.displayable);
+    // We READ a solid number (>=2 slice votes) but the book still came
+    // back empty after retries: the photo was fine, the lookup failed.
+    // The client words that differently from "couldn't read it".
+    const topNum = (numberGuesses && numberGuesses[0]) || numberGuess;
+    const stumped = !candidates.length && !!topNum && (topNum.votes || 0) >= 2;
     return NextResponse.json({
       ok: true,
+      confident,
+      stumped,
       ocr: {
         name: nameGuess || '',
         nameGuesses: nameGuesses || [],
@@ -83,7 +94,7 @@ export async function GET(req) {
       return NextResponse.json({ ok: false, error: 'Give a name or a number' }, { status: 400 });
     }
     const candidates = await findCandidates({ nameGuess, numberGuess });
-    return NextResponse.json({ ok: true, candidates });
+    return NextResponse.json({ ok: true, confident: candidates.some((c) => c.displayable), candidates });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: 'identify-failed', debugError: String(err && err.message || err) },
