@@ -129,6 +129,45 @@ export async function GET(req) {
       }
       return NextResponse.json({ ok: true, diag: { script, scriptExists: fs.existsSync(script), workerEvents: events, deps } });
     }
+    if (searchParams.get('diag') === 'tessload') {
+      // Drive tesseract's worker protocol by hand: does 'load' (wasm
+      // core init) answer? Does 'loadLanguage' (traineddata) answer?
+      const { Worker } = await import('node:worker_threads');
+      const path = await import('node:path');
+      const nm = path.join(process.cwd(), 'node_modules');
+      const script = path.join(nm, 'tesseract.js', 'src', 'worker-script', 'node', 'index.js');
+      const w = new Worker(script);
+      const msgs = [];
+      let waiter = null;
+      w.on('message', (m) => {
+        msgs.push(`${m.action}:${m.status}${m.data && m.data.status ? ':' + m.data.status + ':' + Math.round((m.data.progress || 0) * 100) : ''}${m.status === 'reject' ? ':' + String(m.data).slice(0, 160) : ''}`);
+        if (waiter && m.status !== 'progress') { const f = waiter; waiter = null; f(m); }
+      });
+      w.on('error', (err) => msgs.push('worker-error: ' + String(err && err.message || err)));
+      const call = (action, payload, timeoutMs) => new Promise((resolve) => {
+        const timer = setTimeout(() => { waiter = null; resolve('TIMEOUT'); }, timeoutMs);
+        waiter = (m) => { clearTimeout(timer); resolve(m.status); };
+        w.postMessage({ workerId: 'diag', jobId: 'j-' + action, action, payload });
+      });
+      const t0 = Date.now();
+      const loadRes = await call('load', { options: { lstmOnly: true, corePath: path.join(nm, 'tesseract.js-core'), logging: false } }, 20000);
+      const loadMs = Date.now() - t0;
+      let langRes = 'skipped';
+      let langMs = null;
+      if (loadRes === 'resolve') {
+        const t1 = Date.now();
+        langRes = await call('loadLanguage', {
+          langs: 'eng',
+          options: {
+            langPath: path.join(nm, '@tesseract.js-data', 'eng', '4.0.0'),
+            dataPath: null, cachePath: '/tmp', cacheMethod: 'none', gzip: true, lstmOnly: true,
+          },
+        }, 15000);
+        langMs = Date.now() - t1;
+      }
+      try { await w.terminate(); } catch { /* done */ }
+      return NextResponse.json({ ok: true, diag: { loadRes, loadMs, langRes, langMs, msgs: msgs.slice(0, 30) } });
+    }
     const nameGuess = searchParams.get('name') || '';
     const numberGuess = parseNumberParam(searchParams.get('number'));
     if (!nameGuess && !numberGuess) {
