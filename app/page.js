@@ -32,14 +32,25 @@ const emptySide = () => ({ cards: [], choices: null, busy: false, status: '' });
 // server OCR blow its time limit (the live 504s). Card bands are read
 // from relative positions, so shrinking loses nothing geometrically —
 // but the collector-number digits are tiny, so keep as much resolution
-// as the time budget tolerates: 1800px max dimension (a fresh iPhone
-// photo is 4032px; at the old 1400px cap the number digits landed at
-// ~15-18px tall, at 1800 they stay readable).
+// as the time budget tolerates: 2400px max dimension at JPEG q90 (a
+// fresh iPhone photo is 4032px; at 1800 the number digits were already
+// marginal, and a 2400px portrait JPEG is ~1MB, far under any limit).
+// EXIF orientation is requested explicitly ('from-image'): a phone
+// portrait shot is stored as landscape pixels + a rotate flag, and if
+// the bitmap ignores the flag the canvas bakes a SIDEWAYS photo with
+// no flag left for the server to fix — every reading band then lands
+// wrong. Where the option is unsupported it throws and we fall back
+// to the plain call.
 async function shrinkForUpload(file) {
   try {
     if (!file || !file.type || !file.type.startsWith('image/')) return file;
-    const bmp = await createImageBitmap(file);
-    const MAX = 1800;
+    let bmp;
+    try {
+      bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch {
+      bmp = await createImageBitmap(file);
+    }
+    const MAX = 2400;
     if (Math.max(bmp.width, bmp.height) <= MAX) { bmp.close?.(); return file; }
     const scale = MAX / Math.max(bmp.width, bmp.height);
     const canvas = document.createElement('canvas');
@@ -47,7 +58,7 @@ async function shrinkForUpload(file) {
     canvas.height = Math.round(bmp.height * scale);
     canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
     bmp.close?.();
-    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
     if (!blob) return file;
     return new File([blob], 'photo.jpg', { type: 'image/jpeg' });
   } catch { return file; }

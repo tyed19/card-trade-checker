@@ -34,7 +34,10 @@ export async function POST(req) {
     const work = (async () => {
       const reading = await readCardPhoto(buffer);
       const ocrMs = Date.now() - t0;
-      const candidates = await findCandidates({ ...reading, photoBuffer: buffer });
+      const candidates = await findCandidates({
+        ...reading, photoBuffer: buffer,
+        deadlineAt: t0 + DEADLINE_MS - 4000,
+      });
       return { reading, candidates, ocrMs };
     })();
     const timeout = new Promise((resolve) => {
