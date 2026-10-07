@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { readCardPhoto, getStageStats } from '../../../lib/ocr';
+import { getStageStats } from '../../../lib/ocr';
 import { findCandidates } from '../../../lib/identify';
+import { identifyPhoto } from '../../../lib/hybrid';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -32,13 +33,10 @@ export async function POST(req) {
     const DEADLINE_MS = parseInt(process.env.IDENTIFY_DEADLINE_MS || '50000', 10) || 50000;
     let timer = null;
     const work = (async () => {
-      const reading = await readCardPhoto(buffer);
-      const ocrMs = Date.now() - t0;
-      const candidates = await findCandidates({
-        ...reading, photoBuffer: buffer,
-        deadlineAt: t0 + DEADLINE_MS - 4000,
-      });
-      return { reading, candidates, ocrMs };
+      // Phase 2 hybrid: picture-matching proposes, OCR confirms/rescues
+      // (lib/hybrid.js). Falls back to the pure OCR path on its own
+      // whenever the picture path is unavailable or has no match.
+      return identifyPhoto(buffer, { deadlineAt: t0 + DEADLINE_MS - 4000 });
     })();
     const timeout = new Promise((resolve) => {
       timer = setTimeout(() => resolve(null), Math.max(1000, DEADLINE_MS - (Date.now() - t0)));
@@ -53,8 +51,8 @@ export async function POST(req) {
         ocrStages: getStageStats(),
       });
     }
-    const { reading, candidates, ocrMs } = done;
-    const { nameGuess, nameGuesses, numberGuess, numberGuesses, attackGuesses, debug } = reading;
+    const { reading, candidates, pict, zone } = done;
+    const { nameGuess, nameGuesses, numberGuess, numberGuesses, attackGuesses, debug } = reading || {};
     // Confidence gate verdict: at least one candidate carries structural
     // evidence (see applyGate in lib/identify.js). When none does, the
     // client shows the retake state and never a card picture.
@@ -76,7 +74,13 @@ export async function POST(req) {
         attackGuesses: attackGuesses || [],
       },
       candidates,
-      timing: { ocrMs, totalMs: Date.now() - t0, ocrStages: reading.ocrTiming || null },
+      zone,
+      timing: {
+        ocrMs: done.ocrMs || 0,
+        totalMs: Date.now() - t0,
+        ocrStages: (reading && reading.ocrTiming) || null,
+        pictmatch: pict ? { ...pict.timings, topSim: pict.topSim, margin: pict.margin, indexCount: pict.indexCount } : null,
+      },
       ...(process.env.DEBUG_OCR ? { debug } : {}),
     });
   } catch (err) {

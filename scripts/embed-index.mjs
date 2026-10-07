@@ -14,8 +14,10 @@ import path from 'node:path';
 const { AutoProcessor, CLIPVisionModelWithProjection, RawImage } = await import('@xenova/transformers');
 // model files cache under node_modules/@xenova/transformers/.cache (default) — 85MB quantized vision model
 
+const argv = [];
+for (const tok of process.argv.slice(2)) { argv.push(tok); if (tok === '--all') argv.push('1'); }
 const args = {};
-for (let i = 2; i < process.argv.length; i += 2) args[process.argv[i].replace(/^--/, '')] = process.argv[i + 1];
+for (let i = 0; i < argv.length; i += 2) args[argv[i].replace(/^--/, '')] = argv[i + 1];
 const langs = (args.catalogs || 'en').split(',');
 const setNames = (args.setnames || '').split(',').map((s) => s.trim()).filter(Boolean);
 const setIds = (args.setids || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -33,25 +35,46 @@ const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
 let pool = [];
 for (const lang of langs) {
   const cat = JSON.parse(fs.readFileSync(path.join(DATA, `catalog-${lang}.json`), 'utf8'));
-  const inSets = cat.filter((c) => setIds.includes(c.setId) || setNames.some((n) => (c.setName || '').toLowerCase() === n.toLowerCase()));
-  const rest = cat.filter((c) => !inSets.includes(c) && c.image);
-  const shuffled = [...rest].sort(() => rnd() - 0.5);
-  const randomN = randomFor(langs.indexOf(lang));
-  const distractors = shuffled.slice(0, randomN); // per-language distractor count
-  const picked = [...inSets.filter((c) => c.image), ...distractors];
-  console.log(`[${lang}] in-set cards: ${inSets.length}, distractors picked: ${distractors.length}`);
+  let picked;
+  if (args.all) {
+    picked = cat.filter((c) => c.image);
+    console.log(`[${lang}] --all: ${picked.length} image-bearing cards`);
+  } else {
+    const inSets = cat.filter((c) => setIds.includes(c.setId) || setNames.some((n) => (c.setName || '').toLowerCase() === n.toLowerCase()));
+    const rest = cat.filter((c) => !inSets.includes(c) && c.image);
+    const shuffled = [...rest].sort(() => rnd() - 0.5);
+    const randomN = randomFor(langs.indexOf(lang));
+    const distractors = shuffled.slice(0, randomN); // per-language distractor count
+    picked = [...inSets.filter((c) => c.image), ...distractors];
+    console.log(`[${lang}] in-set cards: ${inSets.length}, distractors picked: ${distractors.length}`);
+  }
   pool.push(...picked.map((c) => ({ ...c, lang })));
 }
 // de-dup by lang+id
 pool = [...new Map(pool.map((c) => [`${c.lang}:${c.id}`, c])).values()];
 console.log(`pool total: ${pool.length}`);
 
+// ---------- sharding: --shard k/n keeps pool indices i where i % n === k ----------
+if (args.shard) {
+  const [k, n] = args.shard.split('/').map(Number);
+  pool = pool.filter((_, i) => i % n === k);
+  console.log(`shard ${k}/${n}: ${pool.length} cards`);
+}
+
+// ---------- seed: --seed-from <name> excludes ids already in index-<name> ----------
+let seedSet = new Set();
+if (args.seedfrom) {
+  const baseMeta = JSON.parse(fs.readFileSync(path.join(DATA, `index-${args.seedfrom}.json`), 'utf8'));
+  seedSet = new Set(baseMeta.ids.map((e) => `${e.lang}:${e.id}`));
+  console.log(`seeded from index-${args.seedfrom}: ${seedSet.size} ids already embedded`);
+}
+
 // ---------- resume state ----------
 const progPath = path.join(DATA, `index-${outName}.progress.json`);
 let doneIds = [];
 if (fs.existsSync(progPath)) doneIds = JSON.parse(fs.readFileSync(progPath, 'utf8'));
 const doneSet = new Set(doneIds);
-const todo = pool.filter((c) => !doneSet.has(`${c.lang}:${c.id}`));
+const todo = pool.filter((c) => !doneSet.has(`${c.lang}:${c.id}`) && !seedSet.has(`${c.lang}:${c.id}`));
 console.log(`already embedded: ${doneSet.size}, todo: ${todo.length}`);
 
 // ---------- model ----------

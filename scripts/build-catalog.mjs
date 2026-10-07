@@ -83,10 +83,16 @@ async function pullSet(s) {
   try {
     const full = await fetchJson(`${BASE}/sets/${encodeURIComponent(s.id)}`);
     if (!full?.cards) { failedSets.push(s); return; }
+    // Printed set total (the TTT in NNN/TTT) — the hybrid's number
+    // cross-check requires total agreement before a pool member may
+    // claim a full-number match (a same-localId card from another set
+    // is a different card).
+    const setTotal = full.cardCount?.official ?? full.cardCount?.total ?? null;
     for (const c of full.cards) {
       cards.push({
         id: c.id, name: c.name, setId: s.id, setName: full.name || s.name,
         localId: c.localId, image: c.image ? `${c.image}/low.png` : null,
+        setTotal,
       });
     }
   } catch { failedSets.push(s); }

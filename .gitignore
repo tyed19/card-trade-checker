@@ -6,4 +6,12 @@ out/
 .vercel
 .DS_Store
 .dev/
-data/
+# data/ is build scratch (API caches, image cache, subset indexes, logs) —
+# EXCEPT the committed Phase 2 artifacts the app ships with.
+data/*
+!data/catalog-en.json
+!data/catalog-ja.json
+!data/index-full.bin
+!data/index-full.json
+!data/index-full.scales.json
+!data/manifest.json

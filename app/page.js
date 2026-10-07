@@ -130,19 +130,26 @@ export default function Home() {
   }
 
   async function checkTrade() {
+    const allCards = [...sides.mine.cards, ...sides.theirs.cards];
+    // Japanese printings are priced from Cardmarket (EUR) and converted —
+    // that estimate is softer than a USD TCGplayer price, so when any
+    // card in the trade is EUR-sourced the fair window widens x1.5.
+    const eurInTrade = allCards.some((c) => c.currency === 'EUR');
+    const fairBand = eurInTrade ? 0.15 * 1.5 : 0.15;
+    const almostBand = eurInTrade ? 0.4 * 1.5 : 0.4;
     const mineTotal = sides.mine.cards.reduce((sum, c) => sum + (c.price || 0), 0);
     const theirsTotal = sides.theirs.cards.reduce((sum, c) => sum + (c.price || 0), 0);
     const hi = Math.max(mineTotal, theirsTotal);
     const lo = Math.min(mineTotal, theirsTotal);
     const diffRatio = hi > 0 ? (hi - lo) / hi : 0;
     let v;
-    if (diffRatio <= 0.15) {
+    if (diffRatio <= fairBand) {
       v = { kind: 'fair', face: '😄', big: 'FAIR TRADE!', sub: 'Both sides match. Trade away! 🎉' };
       try {
         const confetti = (await import('canvas-confetti')).default;
         confetti({ particleCount: 180, spread: 80, origin: { y: 0.7 } });
       } catch { /* no confetti, no problem */ }
-    } else if (diffRatio <= 0.4) {
+    } else if (diffRatio <= almostBand) {
       v = { kind: 'almost', face: '😐', big: 'ALMOST FAIR!', sub: 'Pretty close! A little more would make it fair.' };
     } else {
       const lighterSide = mineTotal < theirsTotal ? sides.mine : sides.theirs;
@@ -307,6 +314,16 @@ export default function Home() {
                 </tr>
               </tbody>
             </table>
+            {['mine', 'theirs'].flatMap((side) => sides[side].cards).map((c, i) => (
+              <div key={'note' + i} style={{ opacity: 0.85 }}>
+                {c.proxy && (
+                  <p>⚠️ {c.name} ({c.set}) #{c.number}: Japanese printing not in the card book — English twin price shown.</p>
+                )}
+                {c.currency === 'EUR' && c.priceEUR != null && (
+                  <p>💱 {c.name} ({c.set}) #{c.number}: Japanese printing, priced from Cardmarket €{c.priceEUR.toFixed(2)} → ${c.price != null ? c.price.toFixed(2) : '—'}.</p>
+                )}
+              </div>
+            ))}
             <div>Manual search — last resort if a photo will not read:</div>
             <div className="row">
               <input placeholder="Card name (e.g. Meowth)" value={manual.name}
@@ -331,8 +348,10 @@ export default function Home() {
               </div>
             ))}
             <p style={{ opacity: 0.75 }}>
-              Prices are TCGplayer market prices via TCGdex (fallback: Pokémon TCG API), refreshed when a card is identified.
-              Demo cards use fixed example prices. Verdict: within 15% is fair, within 40% is almost fair.
+              Prices come from the app's own card catalog (TCGplayer market for English cards, Cardmarket trend
+              converted from EUR for Japanese cards, via TCGdex data), refreshed nightly.
+              Demo cards use fixed example prices. Verdict: within 15% is fair, within 40% is almost fair —
+              both windows widen x1.5 when a EUR-priced (Japanese) card is part of the trade.
             </p>
           </div>
         )}

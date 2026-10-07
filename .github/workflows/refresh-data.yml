@@ -1,0 +1,60 @@
+name: Refresh card data
+
+# Nightly: rebuild the EN+JA catalogs from TCGdex (fresh prices), embed
+# only cards not already in the committed index, merge, and commit the
+# data artifacts back to main — Vercel auto-redeploys on the push.
+# Also runnable on demand from the Actions tab (workflow_dispatch).
+
+on:
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild catalogs (EN + JA)
+        run: |
+          node scripts/build-catalog.mjs en
+          node scripts/build-catalog.mjs ja
+
+      - name: Embed new/changed cards only (incremental)
+        run: node scripts/embed-index.mjs --catalogs en,ja --all --out incr --seed-from full
+
+      - name: Merge index + write manifest
+        run: |
+          node scripts/merge-index.mjs --out full --from full,incr
+          node scripts/make-manifest.mjs
+
+      - name: Commit data artifacts
+        run: |
+          git config user.name "Tye Davis"
+          git config user.email "39977020+tyed19@users.noreply.github.com"
+          git add data/catalog-en.json data/catalog-ja.json \
+                  data/index-full.bin data/index-full.json data/index-full.scales.json \
+                  data/manifest.json
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "Nightly card data refresh (catalogs + price/index update)"
+            git push
+          fi
