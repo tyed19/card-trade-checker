@@ -85,7 +85,17 @@ request falls through to the OCR path rather than dying.
   via picture+number on the sim (variance of the OCR channels, as
   before). Escalation walls run 15–49s locally — deadline-adjacent;
   live numbers in the final report.
-- [ ] Stage 3 (live) + Stage 4 — after push/deploy.
+- [x] Stage 3 (live) — deployment 3bacb32 verified success via gh
+  statuses; live matrix (same 23 runs): **zero wrong displayable top
+  picks**; every photo correct-or-safe. Victini server 1.2s ×3,
+  Tyranitar as-is 1.3–1.5s, Dragonite ×3 picture+number PROXY
+  (5.8–6.6s), Meowth #1 ×3 via escalation, Galvantula ×2 correct,
+  Dialga ×3 correct (one $null price — known pokemontcg backfill
+  flake), Abomasnow correct ×2 / safe ×1, Flapple as-is ×2 correct /
+  sim safe. Workflow: `gh workflow run refresh-data.yml` triggered
+  2026-10-07 (run 37583880704, in progress at report time).
+- [x] Stage 4 — final report delivered; ROADMAP.md Phase 2 status line
+  updated (identification half shipped; binders remain).
 
 **Late calibration fixes (from the phone-sim probes, all measured):**
 7. **Pool score by match kind** — a bare-number co-signal scores +30

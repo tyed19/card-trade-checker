@@ -65,17 +65,34 @@ other collectors.
 
 Goal: make identification quick, and start remembering collections.
 
-- **Own the card book.** Sync the full card catalog and prices into the
+**Status (2026-10-06): identification half SHIPPED and live-verified —
+own catalog + picture-matching hybrid is in production (commit 3bacb32);
+binders are the remaining half of this phase.**
+
+- **Own the card book.** ✅ **Done.** Sync the full card catalog and prices into the
   app's own database on a nightly job, instead of calling free external
   APIs live during every scan. A scan should ask our own database, which
   answers fast and doesn't go down. (The free card books are unreliable
   and one of them is retiring — see Risks below.)
-- **Picture-matching identification.** Instead of reading tiny text off a
+  *As built: EN 23,736 + JA 12,781 cards committed under `data/`
+  (refreshed nightly by `.github/workflows/refresh-data.yml`, which
+  re-pulls TCGdex, embeds only new cards, and commits so Vercel
+  auto-redeploys). No external database service.*
+- **Picture-matching identification.** ✅ **Done, as a hybrid.** Instead of reading tiny text off a
   shiny card, fingerprint every card's official artwork once (an image
   embedding index covering the whole catalog). A photo is fingerprinted
   the same way and matched against the index. Glare and busy full-art
   backgrounds stop mattering, because the match is on the artwork itself.
   Target: roughly 2–3 seconds per card, server-side.
+  *As built: CLIP index of 25,847 prints; picture-matching proposes and
+  OCR confirms/rescues (picture-only only at very high similarity —
+  measured wrong picks reached sim .85, so the collector number
+  co-decides). Verified live on the 8 real test photos + phone-sims:
+  every photo correct-or-safe, zero wrong displayable picks; the
+  picture-verified lane answers in ~1.2–1.5s server-side, hard cards
+  escalate to the full OCR pipeline. Japanese cards are first-class
+  (EUR pricing converted); a JP set missing from the data returns its
+  English twin, labeled for grown-ups. Details: docs/PHASE2-BUILD.md.*
 - **Binders.** A "scan my binder" session mode: a grown-up or older kid
   scans a whole collection in one sitting. Cards are stored per kid,
   duplicates flagged. From then on, trades between cards the app already
