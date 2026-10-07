@@ -6,3 +6,4 @@ out/
 .vercel
 .DS_Store
 .dev/
+data/
