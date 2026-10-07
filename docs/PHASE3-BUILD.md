@@ -48,10 +48,60 @@ shifts row order — binders self-heal, links are point-in-time.
   finishing gifts, "Start this trade" preloads sides + kid
   assignment), ⚖️ MAKE IT FAIR on ALMOST/NOT FAIR verdicts, family
   cross-check markers on set pages.
-- [ ] Verify — fixture tests ✅ 16/16; production build ✅ green;
+- [x] Verify — fixture tests ✅ 16/16; production build ✅ green;
   local walk ✅ (endpoints, ref repair, gift page total exact,
   identify Victini + Meowth correct, no wrong displayables);
-  live spot checks after deploy (below).
+  live spot checks ✅ (below).
+- [x] ROADMAP.md status updates (Phase 2 binders + Phase 3).
+
+## Verification record (2026-10-07)
+
+- **Fixture tests:** `node scripts/test-phase3.mjs` → **16/16 pass**
+  (duplicates, value, set progress, perfect swaps, gift ideas,
+  spare holders, auto-balance ×4 incl. the forced greedy case,
+  gift radar sort/budget, badge tiers, ref↔code + payload round
+  trips incl. unicode kid names, store ops + import merge sums,
+  trade move + badge counting). The round-trip test caught a real
+  bug before any UI shipped: lowercase `x` as the qty separator
+  collides with base36 digits — separator is now capital `X`.
+- **Build:** `npm run build` green; routes `/`, `/api/cards`,
+  `/api/set`, `/api/identify`, `/gift/[code]` all present.
+- **Local walk (production build, port 3107):** home 200; /api/cards
+  pairs+ids resolve (Flapple VMAX e14008 $2.33, Meowth e22394
+  $13.18 — nightly price drift vs the Phase 2 $13.70 snapshot);
+  wrong-ref+correct-id pair **repaired** to the right row;
+  /api/set Battle Styles 183 cards; /gift sample renders "Cards
+  Alex would love!" with total **$15.74 = exact sum** of its 3
+  cards; bad gift code → friendly error page; homepage SSR carries
+  the Phase 3 hint bar + untouched CHECK THE TRADE flow.
+  Identify regression (local): Victini ✅ #20 $0.33 displayable
+  (5.2s); Meowth ✅ #106 displayable #1 (21.8s), zero wrong
+  displayables.
+- **Deploy:** commit `4bad1d3` pushed; GitHub deployment 6920617220
+  (Production, sha 4bad1d3) status **success**.
+- **Live spot checks:** home 200; /gift sample 200 with exact total;
+  /api/cards + /api/set correct; identify Victini ✅ (6.3s) and
+  Meowth ✅ #106 displayable #1 (17.2s), zero wrong displayables.
+  **No Phase 2 regression.**
+
+## Known limitations (plain)
+
+- Client-rendered kid screens (binder grid, set ghosts, picker,
+  MAKE IT FAIR) were verified via build + the exact API contracts
+  they consume + fixture-proven logic/state — this environment has
+  no headless browser, so no pixel-level DOM walk was possible.
+  First real-device tap-through is the remaining proof.
+- Share links are point-in-time: if a nightly catalog rebuild shifts
+  row order between link creation and opening, a link could resolve
+  a neighboring card (on-device binders self-heal via stored ids;
+  links cannot carry ids without ballooning). Links are meant to be
+  opened promptly (texted to grandma), so the window is small.
+- "Trade-up" recommender (3 small doubles → 1 wanted card) from the
+  roadmap's parent layer is represented by the Ideas screen's swaps,
+  not a dedicated feature.
+- Binder moves on "We traded!" only move cards that resolve to
+  catalog refs; unresolvable cards (e.g. demo cards) are logged in
+  the trade count but not moved — by design, never silent.
 
 ## Design notes
 
