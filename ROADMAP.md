@@ -65,9 +65,9 @@ other collectors.
 
 Goal: make identification quick, and start remembering collections.
 
-**Status (2026-10-06): identification half SHIPPED and live-verified —
-own catalog + picture-matching hybrid is in production (commit 3bacb32);
-binders are the remaining half of this phase.**
+**Status (2026-10-07): COMPLETE. Identification shipped in `3bacb32`;
+binders shipped with Phase 3 (see below) — on-device per-kid binders
+with a scan-in session, duplicates, and tap-to-trade from the binder.**
 
 - **Own the card book.** ✅ **Done.** Sync the full card catalog and prices into the
   app's own database on a nightly job, instead of calling free external
@@ -93,40 +93,78 @@ binders are the remaining half of this phase.**
   escalate to the full OCR pipeline. Japanese cards are first-class
   (EUR pricing converted); a JP set missing from the data returns its
   English twin, labeled for grown-ups. Details: docs/PHASE2-BUILD.md.*
-- **Binders.** A "scan my binder" session mode: a grown-up or older kid
+- **Binders.** ✅ **Done (2026-10-07, with Phase 3).** A "scan my binder" session mode: a grown-up or older kid
   scans a whole collection in one sitting. Cards are stored per kid,
   duplicates flagged. From then on, trades between cards the app already
   knows are just tapping pictures on both sides — effectively instant,
   with no recognition step at all. The slow scanner only runs when a
   genuinely new card shows up.
+  *As built: binders live ON-DEVICE (localStorage, versioned schema) —
+  no server database, no accounts. Cards are stored as compact catalog
+  row refs (+ the catalog id, so a ref self-heals if a nightly rebuild
+  ever shifts rows) and resolved through a batch `/api/cards` endpoint.
+  A binder moves between devices via a share link that encodes
+  (row, qty) pairs; importing merges quantities after a confirm.
+  Details: docs/PHASE3-BUILD.md.*
 
 ## Phase 3 — Suggestions + Completion
 
 Goal: with binders known, the app stops only judging trades and starts
 proposing good ones.
 
-- **Trade suggestions.** The app surfaces matches across the family's
+**Status (2026-10-07): SHIPPED — all items below built and verified
+(fixture tests 16/16, production build green, live spot checks in
+docs/PHASE3-BUILD.md).**
+
+- **Trade suggestions.** ✅ The app surfaces matches across the family's
   binders: "You have a double your cousin needs — and they have a double
-  you need."
-- **Auto-balanced trade builder.** When a trade is lopsided, the app
+  you need." *As built: 💡 Ideas screen per kid pair — perfect swaps
+  (mutual doubles-for-needs inside the verdict's fair band) plus
+  one-way "almost-finishing gifts" with a closest-value return; each
+  idea preloads the trade in one tap. Prices stay in a collapsed
+  grown-ups detail.*
+- **Auto-balanced trade builder.** ✅ When a trade is lopsided, the app
   doesn't just say NOT FAIR — it proposes the add-on cards (from the
   lighter side's duplicates, where possible) that would make it even.
-- **Collection completion.** Per-set progress for each kid (for example,
+  *As built: ⚖️ MAKE IT FAIR on ALMOST/NOT FAIR verdicts searches the
+  light side kid's spare copies for the 1–3 cards whose total best
+  closes the gap (in-band preferred, least overshoot wins — fixture
+  tests prove a $6+$5 pair beats a single $13.70 overshoot); when
+  nothing lands in band it shows the closest and says so.*
+- **Collection completion.** ✅ Per-set progress for each kid (for example,
   141 of 163), with the missing cards shown as ghost picture slots to
   hunt for. Sets that are closest to done are surfaced first, because
   finishing a set feels reachable at 12 cards away in a way it doesn't at
   100 away. A family cross-check shows when a card one kid needs is
   sitting in a cousin's duplicate pile.
-- **Parent layer.**
+  *As built: set chips closest-first on the binder home; set pages
+  render the full set from `/api/set` with owned in color and missing
+  as greyed ghost slots (number visible); ghost slots carry a
+  "🦊 has a spare!" marker when another on-device binder holds a
+  double; confetti at 25/50/75/100%.*
+- **Parent layer.** ✅ (inside the grown-ups section, per kid)
   - Binder total value per kid, and duplicate trade-up ideas (turn three
     small doubles into one card the kid actually wants).
-  - **Gift Radar:** for birthdays and holidays, the exact missing cards a
+    *Binder value + doubles value shipped; the "three doubles → one
+    card" trade-up framing is covered by the Ideas screen's swaps —
+    a dedicated trade-up recommender is the one piece not built.*
+  - **Gift Radar:** ✅ for birthdays and holidays, the exact missing cards a
     kid genuinely needs, in budget order — the answer to "what does he
     want?" that a parent or grandparent can actually act on. The list is
     shareable with grandparents.
-- **Kid motivation, without money.** Fair-trader badges for completing
+    *As built: missing cards from the kid's 3 closest sets, price
+    ascending, budget filter ($5/$10/$25/any), and a share link to a
+    public `/gift/<encoded>` page (first name, pictures, set, number,
+    price, list total) rendered from the server catalog — works on any
+    device with zero app state.*
+- **Kid motivation, without money.** ✅ Fair-trader badges for completing
   even trades, and a celebration when a set is completed. Progress and
   collecting are the game; prices stay in the grown-ups layer.
+  *As built: ⭐ profile screen — Fair Trader tiers (1/5/10/25 logged
+  fair trades, counted via the "We traded!" button on FAIR verdicts,
+  with optional binder moves between assigned kids), Set Explorer
+  badges at 50%+ and 👑 crowns at 100%, set-milestone confetti. All
+  computed from binder + trade-log state; no tracking database.*
 
 ## Phase 4 — Native + instant
 

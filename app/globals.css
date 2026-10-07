@@ -120,3 +120,143 @@ input[type='file'] { display: none; }
 }
 .manualResult { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
 .manualResult img { width: 54px; border-radius: 6px; }
+
+/* ---------- Phase 3: kids, binders, ideas, parent layer ---------- */
+.kidBar { max-width: 760px; margin: 0 auto 10px; padding: 0 12px; }
+.kidSwitch { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.kidAvatar {
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  background: #1f3a68; border: 3px solid #3b4d74; border-radius: 16px;
+  padding: 6px 10px; cursor: pointer; color: #fff; font-family: inherit;
+}
+.kidAvatar .kidEmoji { font-size: 30px; line-height: 1.1; }
+.kidAvatar .kidName { font-size: 13px; font-weight: bold; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kidAvatar.sel { background: #2a75bb; box-shadow: 0 0 0 3px #ffcb05; }
+.kidSwitch.big .kidEmoji { font-size: 44px; }
+.kidNav { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+.kidNav button {
+  font-family: inherit; font-weight: 900; font-size: clamp(15px, 4.4vw, 19px);
+  background: #1f3a68; color: #fff; border: 3px solid #3b4d74; border-radius: 999px;
+  padding: 8px 14px; cursor: pointer;
+}
+.kidNav button.on { background: #ffcb05; color: #14213d; border-color: #c79a00; }
+.kidNav button:disabled { opacity: .45; }
+.hintBar { max-width: 760px; margin: 0 auto 10px; padding: 10px 14px; background: #1f3a68; border-radius: 12px; text-align: center; font-weight: bold; }
+.binderMsg { max-width: 760px; margin: 0 auto 10px; padding: 10px; background: #14532d; border: 3px solid #2fbf71; border-radius: 12px; text-align: center; font-weight: 900; font-size: 18px; }
+.importBanner { max-width: 760px; margin: 0 auto 12px; padding: 12px; background: #4c1d95; border: 4px solid #a78bfa; border-radius: 16px; text-align: center; font-size: 17px; }
+.importRow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 10px; align-items: center; }
+.goBtnSmall {
+  font-family: inherit; font-weight: 900; font-size: 16px; cursor: pointer;
+  background: #ffcb05; color: #14213d; border: 3px solid #c79a00; border-radius: 999px; padding: 8px 14px;
+}
+.screen { max-width: 760px; margin: 0 auto; padding: 0 12px 10px; }
+.screenTitle { text-align: center; font-size: clamp(24px, 6.5vw, 32px); margin: 8px 0 12px; }
+.screenNote { text-align: center; font-size: clamp(17px, 5vw, 21px); font-weight: bold; padding: 18px 10px; max-width: 760px; margin: 0 auto; }
+.chipRow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px; }
+.chip { background: #1f3a68; border: 3px solid #3b4d74; border-radius: 999px; padding: 7px 13px; font-weight: 900; font-size: 16px; color: #fff; }
+.chip.btn { cursor: pointer; font-family: inherit; }
+.chip.btn.on { background: #2a75bb; border-color: #ffcb05; }
+.setChips { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.setChip {
+  display: flex; align-items: center; gap: 10px; text-align: left; cursor: pointer;
+  background: #1d3557; border: 3px solid #3b4d74; border-radius: 14px; padding: 9px 12px;
+  color: #fff; font-family: inherit; font-weight: bold; font-size: 16px;
+}
+.setChip .setNums { margin-left: auto; font-weight: 900; }
+.bar { display: inline-block; width: 110px; height: 12px; background: #0f1a30; border-radius: 999px; overflow: hidden; flex: none; }
+.bar > span { display: block; height: 100%; background: #2fbf71; }
+.bar.big { width: min(46vw, 260px); height: 18px; }
+.binderGroup h3 { margin: 14px 0 8px; font-size: 20px; }
+.cardGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.cardTile { position: relative; background: none; border: none; padding: 0; cursor: pointer; }
+.cardTile img { width: 100%; border-radius: 10px; display: block; border: 3px solid rgba(255,255,255,.35); }
+.qtyBadge {
+  position: absolute; top: 6px; right: 6px; background: #ffcb05; color: #14213d;
+  font-weight: 900; border-radius: 999px; padding: 2px 8px; font-size: 15px; border: 2px solid #c79a00;
+}
+.noArt { background: #1f3a68; border: 3px dashed #3b4d74; border-radius: 10px; padding: 18px 6px; text-align: center; font-weight: bold; color: #fff; }
+.qtySheet { position: sticky; bottom: 10px; background: #0f1a30; border: 3px solid #ffcb05; border-radius: 16px; padding: 12px; margin-top: 14px; text-align: center; }
+.qtyName { font-weight: 900; font-size: 18px; margin-bottom: 8px; }
+.qtyRow { display: flex; gap: 10px; justify-content: center; align-items: center; }
+.qtyRow button { font-family: inherit; font-size: 22px; font-weight: 900; background: #2a75bb; color: #fff; border: 3px solid #6fb3ff; border-radius: 12px; padding: 6px 16px; cursor: pointer; }
+.qtyRow span { font-size: 24px; font-weight: 900; }
+.qtyRow .removeBtn { background: #a31621; border-color: #ff8fa3; font-size: 17px; }
+.backBtn { font-family: inherit; font-weight: 900; font-size: 17px; background: #1f3a68; color: #fff; border: 3px solid #3b4d74; border-radius: 999px; padding: 8px 16px; cursor: pointer; }
+.progressHead { display: flex; align-items: center; gap: 12px; justify-content: center; font-size: 22px; font-weight: 900; margin-bottom: 14px; }
+.setSlot { position: relative; }
+.setSlot img { width: 100%; border-radius: 10px; display: block; border: 3px solid rgba(255,255,255,.35); }
+.setSlot.ghost img { filter: grayscale(1); opacity: .32; }
+.setSlot .slotNum { position: absolute; bottom: 6px; left: 6px; background: rgba(10,16,30,.85); border-radius: 8px; padding: 1px 7px; font-weight: 900; font-size: 14px; }
+.setSlot .slotQty { position: absolute; top: 6px; right: 6px; background: #ffcb05; color: #14213d; border-radius: 999px; padding: 1px 7px; font-weight: 900; font-size: 14px; }
+.setSlot .spareTag { position: absolute; top: 6px; left: 6px; background: #14532d; border: 2px solid #2fbf71; border-radius: 999px; padding: 1px 7px; font-weight: 900; font-size: 12.5px; }
+.scanCount { text-align: center; font-size: clamp(26px, 7vw, 36px); font-weight: 900; color: #ffcb05; margin: 6px 0; }
+.lastAdded { display: flex; align-items: center; gap: 12px; justify-content: center; font-weight: 900; font-size: 19px; margin: 8px 0; }
+.lastAdded img { width: 54px; border-radius: 8px; border: 3px solid #2fbf71; }
+.photoBtn.big { display: block; margin: 12px auto; }
+.pickerOverlay { position: fixed; inset: 0; background: rgba(6,10,20,.78); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+.pickerSheet { background: #14213d; border-top: 4px solid #ffcb05; border-radius: 20px 20px 0 0; width: 100%; max-width: 760px; max-height: 86vh; overflow-y: auto; padding: 16px 14px 24px; }
+.pickerSheet h3 { text-align: center; margin: 2px 0 12px; font-size: 21px; }
+.pickedOut { opacity: .35; pointer-events: none; }
+.sideKidRow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+.sideKidLabel { font-weight: 900; font-size: 15px; opacity: .85; }
+.sideKidBtn { font-size: 24px; background: #0f1a30; border: 3px solid #3b4d74; border-radius: 999px; width: 46px; height: 46px; cursor: pointer; line-height: 1; }
+.sideKidBtn.sel { background: #2a75bb; box-shadow: 0 0 0 3px #ffcb05; }
+.pickerBtn { font-family: inherit; font-weight: 900; font-size: 15.5px; background: #ffcb05; color: #14213d; border: 3px solid #c79a00; border-radius: 999px; padding: 9px 13px; cursor: pointer; margin-left: 4px; }
+.thumb .addBtn {
+  position: absolute; bottom: -8px; right: -8px; width: 30px; height: 30px; border-radius: 999px;
+  background: #14532d; color: #fff; border: 2px solid #2fbf71; font-size: 15px; cursor: pointer; line-height: 1;
+}
+.balanceBox { background: rgba(10,16,30,.45); border: 3px dashed #ffcb05; border-radius: 16px; padding: 12px; margin: 14px auto 4px; max-width: 520px; }
+.balanceHead { font-weight: 900; font-size: clamp(19px, 5.5vw, 24px); }
+.balanceCards { display: flex; gap: 8px; justify-content: center; margin: 10px 0; }
+.balanceCard img { width: min(24vw, 110px); border-radius: 10px; border: 3px solid #ffcb05; display: block; }
+.balanceNote { font-weight: bold; font-size: clamp(16px, 4.8vw, 20px); }
+.balanceBtn {
+  font-family: inherit; font-weight: 900; font-size: clamp(19px, 5.5vw, 24px); cursor: pointer;
+  background: #ffcb05; color: #14213d; border: 3px solid #c79a00; border-radius: 999px; padding: 10px 22px; margin-top: 10px;
+}
+.tradedRow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+.tradedBtn {
+  font-family: inherit; font-weight: 900; font-size: clamp(18px, 5vw, 22px); cursor: pointer;
+  background: #2fbf71; color: #06281a; border: 3px solid #14532d; border-radius: 999px; padding: 10px 20px;
+}
+.tradedBtn.move { background: #6fb3ff; border-color: #1e4fa3; color: #0b2447; font-size: clamp(15px, 4.4vw, 18px); }
+.tradedDone { font-weight: 900; font-size: 20px; margin-top: 10px; }
+.ideaPickers { display: flex; align-items: flex-start; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.ideaVs { font-size: 26px; padding-top: 12px; }
+.ideaHead { text-align: center; font-size: 22px; margin: 18px 0 8px; }
+.ideaCard { background: #1d3557; border: 3px solid #3b4d74; border-radius: 16px; padding: 12px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; }
+.ideaSide { display: flex; flex-direction: column; align-items: center; gap: 6px; width: min(34vw, 140px); }
+.ideaSide img { width: 100%; border-radius: 10px; border: 3px solid rgba(255,255,255,.35); }
+.ideaKid { font-weight: 900; font-size: 14.5px; text-align: center; }
+.ideaArrow { font-size: 28px; }
+.ideaDetail { flex-basis: 100%; font-size: 14px; opacity: .9; }
+.ideaDetail summary { cursor: pointer; font-weight: bold; }
+.profileHead { display: flex; flex-direction: column; align-items: center; gap: 2px; border: 4px solid #3b4d74; border-radius: 20px; padding: 14px; background: #1d3557; }
+.profileEmoji { font-size: 64px; line-height: 1.1; }
+.profileName { font-size: 30px; font-weight: 900; }
+.badgeCard { background: #1d3557; border: 3px solid #ffcb05; border-radius: 20px; padding: 16px; text-align: center; margin-top: 14px; }
+.badgeTitle { font-weight: 900; font-size: 19px; letter-spacing: 1px; }
+.badgeStars { font-size: 30px; margin: 4px 0; }
+.badgeBig { font-size: 64px; font-weight: 900; line-height: 1; color: #ffcb05; }
+.badgeName { font-size: 22px; font-weight: 900; }
+.badgeNext { opacity: .85; font-weight: bold; margin-top: 4px; }
+.setBadgeGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.setBadge { background: #1d3557; border: 3px solid #3b4d74; border-radius: 14px; padding: 10px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.setBadgeIcon { font-size: 30px; }
+.setBadgeName { font-weight: 900; font-size: 15px; }
+.setBadgePct { font-weight: 900; color: #2fbf71; }
+.parentLayer { border-top: 2px solid #3b4d74; margin-top: 16px; padding-top: 6px; }
+.parentLayer h4 { margin: 14px 0 6px; font-size: 16.5px; }
+.grownBox .go.danger { background: #a31621; box-shadow: 0 3px 0 #6d0f16; }
+
+/* ---------- Gift Radar public page ---------- */
+.giftSub { text-align: center; font-size: clamp(16px, 4.6vw, 20px); font-weight: bold; max-width: 640px; margin: 6px auto 16px; padding: 0 12px; }
+.giftGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; max-width: 860px; margin: 0 auto; padding: 0 12px; }
+.giftCard { background: #1d3557; border: 3px solid #3b4d74; border-radius: 16px; padding: 10px; text-align: center; }
+.giftCard img { width: 100%; border-radius: 10px; display: block; }
+.giftName { font-weight: 900; font-size: 17.5px; margin-top: 8px; }
+.giftMeta { font-weight: bold; opacity: .85; font-size: 15px; }
+.giftPrice { font-weight: 900; font-size: 19px; color: #ffcb05; margin-top: 4px; }
+.giftTotal { text-align: center; font-size: clamp(21px, 6vw, 28px); font-weight: 900; margin: 20px 10px 6px; }
+.giftFoot, .giftNote { text-align: center; max-width: 640px; margin: 10px auto 30px; padding: 0 14px; font-weight: bold; opacity: .9; }
