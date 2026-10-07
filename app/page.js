@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const DEMO = {
   mine: {
@@ -15,15 +15,132 @@ const DEMO = {
   },
 };
 
-function speak(text) {
+// ---------- Voice ----------
+// Every fixed line in the app has a pre-recorded clip (warm human
+// voice) under public/audio — the built-in speechSynthesis voice was
+// the robot the kids hated. Dynamic lines (only the NOT FAIR detail,
+// which contains a card count) still use the synthesizer, but with
+// the best system voice we can find and friendlier prosody. If a
+// clip fails to load or play, we fall back to the synthesizer for
+// that line — speech is a bonus, never silence, never a blocker.
+
+const CLIPS = {
+  looking: '/audio/looking.mp3',
+  tap: '/audio/tap-your-card.mp3',
+  stumped: '/audio/stumped.mp3',
+  unreadable: '/audio/couldnt-read.mp3',
+  wrong: '/audio/something-wrong.mp3',
+  gotIt: '/audio/got-it.mp3',
+  takeAgain: '/audio/take-again.mp3',
+  fair: '/audio/verdict-fair.mp3',
+  almost: '/audio/verdict-almost.mp3',
+  notfair: '/audio/verdict-notfair.mp3',
+  demo: '/audio/demo-ready.mp3',
+  allClear: '/audio/all-clear.mp3',
+};
+
+const clipEls = {};
+let currentClip = null;
+
+function getClipEl(src) {
+  if (!clipEls[src]) {
+    const a = new Audio();
+    a.preload = 'auto';
+    a.src = src;
+    clipEls[src] = a;
+  }
+  return clipEls[src];
+}
+
+function stopAllSpeech() {
+  try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
+  if (currentClip) {
+    try { currentClip.pause(); currentClip.currentTime = 0; } catch { /* ignore */ }
+    currentClip = null;
+  }
+}
+
+// Preference order for the fallback system voice: warm, natural
+// en-US voices first; novelty/compact voices are excluded outright.
+const VOICE_PREFS = [
+  /samantha/i,
+  /google us english/i,
+  /natural/i,
+  /neural/i,
+  /karen/i,
+  /moira/i,
+  /zira/i,
+  /aria/i,
+];
+const VOICE_AVOID = /fred|zarvox|trinoids|albert|bad news|good news|bahh|bells|boing|bubbles|cellos|deranged|hysterical|jester|pipe organ|wobble|whisper|superstar|compact/i;
+
+function pickVoice() {
+  try {
+    const voices = window.speechSynthesis?.getVoices() || [];
+    if (!voices.length) return null;
+    const en = voices.filter((v) => /^en([-_]|$)/i.test(v.lang || ''));
+    const pool = (en.length ? en : voices).filter((v) => !VOICE_AVOID.test(v.name || ''));
+    if (!pool.length) return null;
+    for (const re of VOICE_PREFS) {
+      const hit = pool.find((v) => re.test(v.name) && /^en[-_]US/i.test(v.lang || ''));
+      if (hit) return hit;
+    }
+    for (const re of VOICE_PREFS) {
+      const hit = pool.find((v) => re.test(v.name));
+      if (hit) return hit;
+    }
+    return pool.find((v) => v.default) || pool[0];
+  } catch { return null; }
+}
+
+if (typeof window !== 'undefined' && window.speechSynthesis) {
+  // Voices load asynchronously; re-pick whenever the list changes
+  // (pickVoice() is also called fresh at every synthSpeak()).
+  try { window.speechSynthesis.onvoiceschanged = () => pickVoice(); } catch { /* ignore */ }
+}
+
+function synthSpeak(text) {
   try {
     const synth = window.speechSynthesis;
     if (!synth) return;
+    if (currentClip) {
+      try { currentClip.pause(); currentClip.currentTime = 0; } catch { /* ignore */ }
+      currentClip = null;
+    }
     synth.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.95;
+    const v = pickVoice();
+    if (v) u.voice = v;
+    u.rate = 0.98;
+    u.pitch = 1.1;
     synth.speak(u);
   } catch { /* speech is a bonus, never a blocker */ }
+}
+
+// Play the recorded clip for a fixed line. Resolves when the clip
+// ends (or after falling back to the synthesizer for that line).
+function playClip(key, fallbackText) {
+  const src = CLIPS[key];
+  if (!src) { if (fallbackText) synthSpeak(fallbackText); return Promise.resolve(); }
+  stopAllSpeech();
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      if (!ok && fallbackText) synthSpeak(fallbackText);
+      resolve();
+    };
+    try {
+      const el = getClipEl(src);
+      currentClip = el;
+      el.onended = () => { if (currentClip === el) currentClip = null; done(true); };
+      el.onerror = () => done(false);
+      el.currentTime = 0;
+      const p = el.play();
+      if (p && p.catch) p.catch(() => done(false));
+    } catch { done(false); }
+  });
 }
 
 const emptySide = () => ({ cards: [], choices: null, busy: false, status: '' });
@@ -65,6 +182,18 @@ async function shrinkForUpload(file) {
 }
 
 export default function Home() {
+  // Preload the voice clips on the first tap anywhere, so they start
+  // instantly when spoken later (and a gesture-warmed <audio> element
+  // satisfies iOS autoplay rules for the tap-driven flow).
+  useEffect(() => {
+    const warm = () => {
+      Object.values(CLIPS).forEach((src) => { try { getClipEl(src).load(); } catch { /* ignore */ } });
+      window.removeEventListener('pointerdown', warm);
+    };
+    window.addEventListener('pointerdown', warm);
+    return () => window.removeEventListener('pointerdown', warm);
+  }, []);
+
   const [sides, setSides] = useState({ mine: emptySide(), theirs: emptySide() });
   const [verdict, setVerdict] = useState(null);
   const [grownOpen, setGrownOpen] = useState(false);
@@ -78,7 +207,7 @@ export default function Home() {
     if (!file) return;
     setVerdict(null);
     setSide(side, { busy: true, status: '🔎 Looking at your card…' });
-    speak('Looking at your card');
+    playClip('looking', 'Looking at your card');
     try {
       const upload = await shrinkForUpload(file);
       const form = new FormData();
@@ -93,22 +222,22 @@ export default function Home() {
         : [];
       if (choices.length) {
         setSide(side, { busy: false, choices, status: 'Tap your card! 👇' });
-        speak('Tap your card!');
+        playClip('tap', 'Tap your card!');
       } else if (json.ok && json.stumped) {
         // The photo read fine (a solid number) but the card book came
         // back empty — don't blame the kid's photo for that.
         setSide(side, { busy: false, choices: null, status: '🤔 That one stumped me! One more try!' });
-        speak('That one stumped me! Try again!');
+        playClip('stumped', 'That one stumped me! Try again!');
       } else if (json.ok) {
         setSide(side, { busy: false, choices: null, status: '😕 I could not read that one. Flat + bright, try again!' });
-        speak('I could not read that one. Try again, flat and bright!');
+        playClip('unreadable', 'I could not read that one. Try again, flat and bright!');
       } else {
         setSide(side, { busy: false, choices: null, status: '😕 Something went wrong. Tap TRY AGAIN!' });
-        speak('Something went wrong. Try again!');
+        playClip('wrong', 'Something went wrong. Try again!');
       }
     } catch {
       setSide(side, { busy: false, choices: null, status: '😕 Something went wrong. Tap TRY AGAIN!' });
-      speak('Something went wrong. Try again!');
+      playClip('wrong', 'Something went wrong. Try again!');
     }
   }
 
@@ -116,12 +245,12 @@ export default function Home() {
     const s = sides[side];
     if (!s.choices) return;
     setSide(side, { cards: [...s.cards, cand], choices: null, status: '⭐ Got it!' });
-    speak('Got it!');
+    playClip('gotIt', 'Got it!');
   }
 
   function noneOfThese(side) {
     setSide(side, { choices: null, status: 'OK! Take the picture again 📸' });
-    speak('OK! Take the picture again');
+    playClip('takeAgain', 'OK! Take the picture again');
   }
 
   function removeCard(side, idx) {
@@ -163,7 +292,17 @@ export default function Home() {
       };
     }
     setVerdict(v);
-    speak(v.big + ' ' + v.sub);
+    // FAIR and ALMOST lines are fully static -> recorded clips. The
+    // NOT FAIR headline is a clip too, but its detail line contains
+    // the lighter side + a card count, so that part is synthesized
+    // right after the clip finishes.
+    if (v.kind === 'fair') {
+      playClip('fair', v.big + ' ' + v.sub);
+    } else if (v.kind === 'almost') {
+      playClip('almost', v.big + ' ' + v.sub);
+    } else {
+      playClip('notfair', v.big).then(() => synthSpeak(v.sub));
+    }
     setTimeout(() => {
       document.querySelector('.verdict')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 60);
@@ -175,13 +314,13 @@ export default function Home() {
       theirs: { ...emptySide(), cards: [DEMO.theirs], status: '⭐ Got it!' },
     });
     setVerdict(null);
-    speak('Pretend cards ready! Tap Check the Trade!');
+    playClip('demo', 'Pretend cards ready! Tap Check the Trade!');
   }
 
   function resetAll() {
     setSides({ mine: emptySide(), theirs: emptySide() });
     setVerdict(null);
-    speak('All clear! Take a picture!');
+    playClip('allClear', 'All clear! Take a picture!');
   }
 
   async function manualSearch() {
