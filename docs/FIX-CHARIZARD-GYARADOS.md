@@ -198,3 +198,51 @@ honest tap choices when both are displayable.
     wrong crown is gone — phone runs now fail honestly); Mega as-is
     0/2 safe (Charmander vetoed both times), Mega phone 0/2 with the
     coFrag crown above (fixed by the 0.84 floor).
+18. Rounds 3-6 (further live iterations):
+    - Rescue crediting pass (identify.js): a card fetched by ONE
+      token's search is verified against ALL tokens. Without it the
+      Charizard fetch ("Reign" search) never earned its second
+      confirmation — the glued twin "InfernaljRe" confirms locally,
+      but its own search returns nothing.
+    - Rescue round 2 retries FAILED token searches: pokemontcg's
+      wildcard searches 500/502 in bursts; the old round 2 only
+      re-searched the top-3 voted (junk) tokens.
+    - Rescue re-rank: up to 12 token-confirmed cards are art-scored,
+      THEN cut to 6 by (tokens, score). Nine Charizard ex prints
+      share "Infernal Reign"; cutting in search order dropped the
+      true promo (8th) unmeasured.
+    - Bare reads as SECONDARY evidence (ocr.js computeBare): the bare
+      scan now runs even when a full guess exists; bare reads append
+      to numberGuesses (never numberGuess). Alongside it, the rescue
+      credits a PROMO print carrying a secondary bare number (+25,
+      bareNumMatch). Measured: svp-74 art 0.68 -> 107, sibling
+      sv3-223 art 0.72 -> 109; only the bare bonus (132) separates
+      them.
+
+## Final verification (production, commit 4bdab78, 2026-10-10)
+
+- Charizard ex svp-074: as-is 2/2 PASS-TOP (displayable, 132, via
+  Reign+InfernaljRe rescue + secondary-bare bonus; 22-28s). Phone-sim
+  0/2 SAFE fails: the re-encoded JPEG loses the ability text entirely
+  (no Reign token survives) and bare 074 stands uncorroborated — the
+  gate correctly refuses. The earlier wrong crown (Porygon-Z) is gone
+  on every run. Note: the sim double-encodes an already-compressed
+  1320px photo; the real phone path downscales a full-res capture.
+- Mega Charizard X ex me02-013: as-is 3/3 PASS-TOP across the last two
+  deploys (95, digit-variant; its same-card ultra print me02-109 rides
+  as second displayable choice; the exact-read Charmander is vetoed
+  every time; ~40s). Phone-sim 0/2 SAFE fails (its number band does
+  not survive the re-encode at all — no 011/94, no variant fuel; the
+  earlier fragment crown of Power Keepers Charizard ex is gone via
+  the 0.84 coFrag floor).
+- Dark Gyarados cel25cc-CC005: 5/5 PASS-TOP (as-is x3, phone-sim x2;
+  8-13s, picture+number cross-check zone; the vintage base5-8 rides
+  as the honest second choice where both are displayable).
+- Regressions (final build): classic suite 8/8 correct-displayable
+  (Flapple, Abomasnow, Meowth, Galvantula, Victini, Dialga promo,
+  Tyranitar, JP Dragonite proxy — no wrong tops, no deadline deaths);
+  Tyranitar phone-sim correct (24.5s). No JP "…V" junk displayables
+  observed anywhere after the nameSimilarity floor.
+- Data note: the fix commit's index count (25,872) was superseded —
+  the nightly refresh landed three commits mid-task, and the shipped
+  index is 25,889 vectors (nightly 25,864 + 25 Classic Collection).
