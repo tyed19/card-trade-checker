@@ -147,6 +147,23 @@ const catalog = cards.map((c) => {
   const d = done.get(c.id) || {};
   return { ...c, rarity: d.rarity ?? null, usd: d.usd ?? null, eur: d.eur ?? null, usdVariant: d.usdVariant ?? null };
 });
+if (lang === 'en') {
+  // Celebrations Classic Collection (cel25cc): TCGdex carries these 25
+  // reprints with NO image and a localId (CC005) that is not the number
+  // printed on the card (8/82). Re-apply the committed overrides so the
+  // nightly rebuild keeps their art + printed-number aliases — without
+  // this the rows revert to image-less and drop out of the picture index
+  // on the next incremental embed pass. See docs/FIX-CHARIZARD-GYARADOS.md.
+  try {
+    const overrides = JSON.parse(fs.readFileSync(path.join(DATA, 'cc-overrides.json'), 'utf8'));
+    let n = 0;
+    for (const row of catalog) {
+      const o = overrides[row.id];
+      if (o) { row.image = o.image; row.printedNum = o.printedNum; row.printedTotal = o.printedTotal; n++; }
+    }
+    console.log(`[en] cc-overrides applied to ${n} rows`);
+  } catch { console.log('[en] no cc-overrides.json — skipped'); }
+}
 const outPath = path.join(DATA, `catalog-${lang}.json`);
 fs.writeFileSync(outPath, JSON.stringify(catalog));
 const bytes = fs.statSync(outPath).size;

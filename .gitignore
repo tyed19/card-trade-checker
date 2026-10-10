@@ -15,3 +15,4 @@ data/*
 !data/index-full.json
 !data/index-full.scales.json
 !data/manifest.json
+!data/cc-overrides.json

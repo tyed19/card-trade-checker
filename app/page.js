@@ -199,6 +199,12 @@ export default function Home() {
       window.removeEventListener('pointerdown', warm);
     };
     window.addEventListener('pointerdown', warm);
+    // Warm the identify backend (CLIP model + OCR worker) so the FIRST
+    // scan of a session doesn't pay cold-start inside its deadline —
+    // the first scan is virtually always the blue MY CARD side, which
+    // is why slow first scans looked like a my-side bug. Best-effort:
+    // serverless instances are reused opportunistically, not guaranteed.
+    try { fetch('/api/warm').catch(() => {}); } catch { /* ignore */ }
     return () => window.removeEventListener('pointerdown', warm);
   }, []);
 
@@ -207,6 +213,9 @@ export default function Home() {
   const [grownOpen, setGrownOpen] = useState(false);
   const [manual, setManual] = useState({ name: '', number: '', side: 'mine', results: [], busy: false });
   const fileRefs = { mine: useRef(null), theirs: useRef(null) };
+  // Per-side scan sequence: a response may only write state for the
+  // scan that is still current on that side (see onPhoto).
+  const scanSeq = useRef({ mine: 0, theirs: 0 });
 
   // ---- Phase 3 state: views, per-side kid assignment, pickers ----
   const binderState = useStoreState();
@@ -272,8 +281,15 @@ export default function Home() {
 
   async function onPhoto(side, file) {
     if (!file) return;
+    // New scan, new sequence: any response still in flight for this
+    // side belongs to an older photo and must never write state again.
+    // Choices are cleared NOW — previously the last photo's choices
+    // stayed visible (and tappable!) during the whole re-scan, so a
+    // mid-scan tap added the WRONG card before the response landed.
+    const seq = ++scanSeq.current[side];
+    const stale = () => scanSeq.current[side] !== seq;
     setVerdict(null);
-    setSide(side, { busy: true, status: '🔎 Looking at your card…' });
+    setSide(side, { busy: true, choices: null, status: '🔎 Looking at your card…' });
     playClip('looking', 'Looking at your card');
     try {
       const upload = await shrinkForUpload(file);
@@ -281,6 +297,7 @@ export default function Home() {
       form.append('photo', upload);
       const res = await fetch('/api/identify', { method: 'POST', body: form });
       const json = await res.json();
+      if (stale()) return;
       // Picture choices are shown ONLY for server-gated displayable
       // candidates. A weak guess is never presented as an answer: with
       // no displayable candidate we go to the honest retake state.
@@ -288,7 +305,10 @@ export default function Home() {
         ? (json.candidates || []).filter((c) => c.displayable).slice(0, 3)
         : [];
       if (choices.length) {
-        setSide(side, { busy: false, choices, status: 'Tap your card! 👇' });
+        // Status stays EMPTY here: the choices block renders its own
+        // "Tap your card! 👇" heading — setting it here too printed the
+        // heading twice (the doubled heading in the user's screenshot).
+        setSide(side, { busy: false, choices, status: '' });
         playClip('tap', 'Tap your card!');
       } else if (json.ok && json.stumped) {
         // The photo read fine (a solid number) but the card book came
@@ -303,6 +323,7 @@ export default function Home() {
         playClip('wrong', 'Something went wrong. Try again!');
       }
     } catch {
+      if (stale()) return;
       setSide(side, { busy: false, choices: null, status: '😕 Something went wrong. Tap TRY AGAIN!' });
       playClip('wrong', 'Something went wrong. Try again!');
     }
