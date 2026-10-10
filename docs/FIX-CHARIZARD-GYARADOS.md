@@ -175,3 +175,26 @@ honest tap choices when both are displayable.
     still has to be — and is — removed by the picture veto; the variant
     survivor displays on name+total+art evidence. All three conditions
     required; fires only when the alternative is a retake.
+17. Round 2 (from live acceptance runs on the first deploy):
+    - Name prefix variants now interleave with their parent read (the
+      first cut appended them after all six base guesses, so the
+      6-guess budget silently dropped them — Mega's live guesses showed
+      no prefixes at all).
+    - Attack token caps 8 -> 10 (OCR assembly + rescue list): the token
+      that fetches Charizard's ability ("Reign") sat 9th in assembly
+      order and was cut at 8.
+    - findCandidates detail pool 5 -> 8 (same widening the strong-read
+      retry already used): same-name families (four Mega Charizard X
+      prints) plus substring namesakes crowded the true print out.
+    - coFrag art floor 0.78 -> 0.84 (hybrid): the Mega phone path,
+      newly completing inside the deadline thanks to fix 1, crowned a
+      Power Keepers Charizard ex (pool sim 0.8264) on a lone
+      "Charizard" fragment hit. Fragments are the weakest co-signal;
+      their art must clear the shiny-mush band. Full-name coName keeps
+      its 0.78 floor.
+    Live round-1 results on this deploy: Gyarados 4/4 correct-top
+    (8-12s, picture+number zone, CC005 145 over base5-8 143 — both
+    shown as honest choices); Charizard 0/4 but safe (the Porygon-Z
+    wrong crown is gone — phone runs now fail honestly); Mega as-is
+    0/2 safe (Charmander vetoed both times), Mega phone 0/2 with the
+    coFrag crown above (fixed by the 0.84 floor).
