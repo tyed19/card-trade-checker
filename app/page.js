@@ -210,6 +210,9 @@ export default function Home() {
 
   const [sides, setSides] = useState({ mine: emptySide(), theirs: emptySide() });
   const [verdict, setVerdict] = useState(null);
+  // True after a card change wiped a verdict: the flow shows a
+  // "cards changed — tap CHECK again" note instead of a stale answer.
+  const [staleNote, setStaleNote] = useState(false);
   const [grownOpen, setGrownOpen] = useState(false);
   const [manual, setManual] = useState({ name: '', number: '', side: 'mine', results: [], busy: false });
   const fileRefs = { mine: useRef(null), theirs: useRef(null) };
@@ -262,6 +265,7 @@ export default function Home() {
     });
     setSideKids({ mine: aKid, theirs: bKid });
     setVerdict(null);
+    setStaleNote(false);
     setTradedDone(false);
     setView('trade');
     try { window.scrollTo({ top: 0 }); } catch { /* ignore */ }
@@ -279,6 +283,18 @@ export default function Home() {
   const setSide = (side, patch) =>
     setSides((prev) => ({ ...prev, [side]: { ...prev[side], ...patch } }));
 
+  // A side's cards changed (add or remove, ANY path): a verdict on
+  // screen was computed from the OLD contents and must never sit over
+  // new totals — clear it, flag the stale note, and reset the traded
+  // flag. 🤝 "We traded!" reads the sides at tap time, so logging
+  // always operates on the final contents. This is the ONE append/
+  // change path used pre- and post-verdict alike; the only full
+  // reset remains the explicit 🔁 New trade button (resetAll).
+  function cardsChanged() {
+    if (verdict) { setVerdict(null); setStaleNote(true); }
+    setTradedDone(false);
+  }
+
   async function onPhoto(side, file) {
     if (!file) return;
     // New scan, new sequence: any response still in flight for this
@@ -288,7 +304,10 @@ export default function Home() {
     // mid-scan tap added the WRONG card before the response landed.
     const seq = ++scanSeq.current[side];
     const stale = () => scanSeq.current[side] !== seq;
-    setVerdict(null);
+    // The verdict is deliberately NOT cleared here: starting a scan
+    // changes nothing yet, and a failed/stumped photo must not throw
+    // away a good valuation. It clears in cardsChanged() the moment
+    // a card actually lands on (or leaves) a side.
     setSide(side, { busy: true, choices: null, status: '🔎 Looking at your card…' });
     playClip('looking', 'Looking at your card');
     try {
@@ -333,6 +352,7 @@ export default function Home() {
     const s = sides[side];
     if (!s.choices) return;
     setSide(side, { cards: [...s.cards, cand], choices: null, status: '⭐ Got it!' });
+    cardsChanged(); // append: existing cards/kid assignment stay put
     playClip('gotIt', 'Got it!');
   }
 
@@ -343,7 +363,7 @@ export default function Home() {
 
   function removeCard(side, idx) {
     setSide(side, { cards: sides[side].cards.filter((_, i) => i !== idx) });
-    setVerdict(null);
+    cardsChanged();
   }
 
   // Grown-ups-only, plain-words statement of the rule behind a
@@ -397,6 +417,7 @@ export default function Home() {
     v.theirsTotal = theirsTotal;
     v.ruleNote = fairnessRuleNote(band, gap);
     setVerdict(v);
+    setStaleNote(false);
     setTradedDone(false);
     // FAIR and ALMOST lines are fully static -> recorded clips. The
     // NOT FAIR headline is a clip too, but its detail line contains
@@ -420,12 +441,14 @@ export default function Home() {
       theirs: { ...emptySide(), cards: [DEMO.theirs], status: '⭐ Got it!' },
     });
     setVerdict(null);
+    setStaleNote(false);
     playClip('demo', 'Pretend cards ready! Tap Check the Trade!');
   }
 
   function resetAll() {
     setSides({ mine: emptySide(), theirs: emptySide() });
     setVerdict(null);
+    setStaleNote(false);
     playClip('allClear', 'All clear! Take a picture!');
   }
 
@@ -446,7 +469,7 @@ export default function Home() {
   function manualAdd(cand) {
     const side = manual.side;
     setSide(side, { cards: [...sides[side].cards, cand] });
-    setVerdict(null);
+    cardsChanged();
   }
 
   // ---- Phase 3: auto-balance ("MAKE IT FAIR") ----
@@ -555,7 +578,7 @@ export default function Home() {
           onChange={(e) => { onPhoto(side, e.target.files && e.target.files[0]); e.target.value = ''; }}
         />
         <button className="photoBtn" disabled={s.busy} onClick={() => fileRefs[side].current && fileRefs[side].current.click()}>
-          📸 {s.busy ? 'LOOKING…' : 'TAKE A PICTURE'}
+          {s.busy ? '👀 LOOKING…' : s.cards.length ? '➕ ADD A CARD' : '📸 TAKE A PICTURE'}
         </button>
         <div className="status">{s.status}</div>
 
@@ -592,7 +615,7 @@ export default function Home() {
             usedCounts={usedCounts}
             onPick={(card) => {
               setSide(side, { cards: [...sides[side].cards, card], status: '⭐ Got it!' });
-              setVerdict(null);
+              cardsChanged(); // binder picks append, same as photo picks
             }}
             onClose={() => setPickerSide(null)}
           />
@@ -653,6 +676,10 @@ export default function Home() {
         <button className="demoBtn" onClick={loadDemo}>🎲 Pretend cards</button>
       </div>
 
+      {staleNote && !verdict && (
+        <div className="staleNote">🔄 Cards changed! Tap ⚖️ CHECK THE TRADE to get the new answer!</div>
+      )}
+
       <div className="checkWrap">
         <button className="checkBtn" disabled={!bothReady} onClick={() => checkTrade()}>
           ⚖️ CHECK THE TRADE
@@ -691,6 +718,11 @@ export default function Home() {
             </div>
           )}
           {verdict.kind === 'fair' && tradedDone && <div className="tradedDone">⭐ Counted! Nice trading!</div>}
+          <div className="addMoreRow">
+            <span>Not done yet? Add more cards — nothing here is cleared:</span>
+            <button className="againBtn addMore" onClick={() => fileRefs.mine.current && fileRefs.mine.current.click()}>➕ MY side</button>
+            <button className="againBtn addMore" onClick={() => fileRefs.theirs.current && fileRefs.theirs.current.click()}>➕ THEIR side</button>
+          </div>
           <button className="againBtn" onClick={resetAll}>🔁 New trade</button>
         </div>
       )}
