@@ -13,7 +13,7 @@ import * as store from '../lib/store';
 import {
   binderList, duplicates, setProgress, binderValue, perfectSwaps, giftIdeas,
   spareHolders, giftRadar, fairTraderBadge, kidFairTrades, setBadges, ownedRefSet,
-  radarSets, normalizeFairness, fmtCushion, CUSHION_CHOICES,
+  radarSets, normalizeFairness, fmtCushion, CUSHION_CHOICES, fmtPriceLine,
 } from '../lib/logic';
 
 // "1 kind" / "3 kinds" — the count word agrees with the number.
@@ -176,7 +176,7 @@ export function KidBar({ state, view, go }) {
 export function CardTile({ entry, onTap, badge, showPrice = false }) {
   const c = entry.card || entry;
   const qty = entry.qty || 1;
-  const priced = typeof c.price === 'number';
+  const priceLine = fmtPriceLine(c, qty);
   return (
     <button className="cardTile" onClick={onTap}>
       {c.thumb || c.image
@@ -184,10 +184,8 @@ export function CardTile({ entry, onTap, badge, showPrice = false }) {
         : <div className="noArt">{c.name}</div>}
       {entry.qty > 1 && <span className="qtyBadge">×{entry.qty}</span>}
       {badge}
-      {showPrice && (priced
-        ? <span className="tilePrice">{qty > 1
-          ? `$${c.price.toFixed(2)} ×${qty} · $${(c.price * qty).toFixed(2)}`
-          : `$${c.price.toFixed(2)}`}</span>
+      {showPrice && (priceLine
+        ? <span className="tilePrice">{priceLine}</span>
         : <span className="tilePrice none">no price</span>)}
     </button>
   );
@@ -315,6 +313,12 @@ export function SetPage({ kid, setKey, go }) {
     return spareHolders(missingRefs, others);
   }, [lists, missingRefs, kid, setData]);
   const state = useStoreState();
+  // This kid's owned entries in THIS set — valued with the same
+  // binderValue() helper as the binder banner and ParentLayer.
+  const setValue = useMemo(
+    () => binderValue(list.filter((e) => e.card.lang === lang && String(e.card.setId) === String(setId))),
+    [list, lang, setId]
+  );
   const ownedCount = setData ? setData.cards.filter((c) => owned.has(c.ref)).length : 0;
   const totalShown = setData ? (setData.set.total || setData.cards.length) : 0;
   const pct = totalShown ? ownedCount / totalShown : 0;
@@ -342,19 +346,36 @@ export function SetPage({ kid, setKey, go }) {
         <span className="bar big"><span style={{ width: Math.round((ownedCount / totalShown) * 100) + '%' }} /></span>
         <span>{Math.round((ownedCount / totalShown) * 100)}%</span>
       </div>
+      {ownedCount > 0 && (
+        <div className="setValueLine">
+          💰 Your cards in this set: ${setValue.total.toFixed(2)}
+          {setValue.unpriced > 0 && (
+            <span className="setValueNote"> ({setValue.unpriced} card{setValue.unpriced === 1 ? ' has' : 's have'} no price yet)</span>
+          )}
+        </div>
+      )}
       <div className="cardGrid setGrid">
         {setData.cards.map((c) => {
           const has = owned.has(c.ref);
+          const ownEntry = has ? list.find((e) => e.ref === c.ref) : null;
+          const qty = ownEntry ? ownEntry.qty : 0;
+          const priceLine = fmtPriceLine(c, has ? qty : 1);
           const holderKids = holders.get(c.ref) || [];
           const holder = holderKids.length ? state.kids.find((k) => k.id === holderKids[0]) : null;
           return (
             <div key={c.ref} className={`setSlot${has ? '' : ' ghost'}`}>
-              {c.thumb || c.image
-                ? <img src={c.thumb || c.image} alt={c.name} loading="lazy" />
-                : <div className="noArt">{c.name}</div>}
-              <span className="slotNum">#{c.number}</span>
-              {has && <span className="slotQty">×{(list.find((e) => e.ref === c.ref) || {}).qty}</span>}
-              {holder && <span className="spareTag">{holder.emoji} has a spare!</span>}
+              <div className="slotArt">
+                {c.thumb || c.image
+                  ? <img src={c.thumb || c.image} alt={c.name} loading="lazy" />
+                  : <div className="noArt">{c.name}</div>}
+                <span className="slotNum">#{c.number}</span>
+                {has && <span className="slotQty">×{qty}</span>}
+                {holder && <span className="spareTag">{holder.emoji} has a spare!</span>}
+              </div>
+              {has && (priceLine
+                ? <span className="slotPrice">{priceLine}</span>
+                : <span className="slotPrice none">no price</span>)}
+              {!has && priceLine && <span className="slotPrice muted">{priceLine}</span>}
             </div>
           );
         })}

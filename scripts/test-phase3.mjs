@@ -9,7 +9,7 @@ import {
   perfectSwaps, giftIdeas, spareHolders, autoBalance, giftRadar,
   fairTraderBadge, kidFairTrades, setBadges, FAIR_BAND,
   fairnessBand, verdictKind, normalizeFairness, fmtCushion,
-  radarQualifies, radarSets,
+  radarQualifies, radarSets, fmtPriceLine,
 } from '../lib/logic.js';
 import { encodePayload, decodePayload, packCards, unpackCards, refToCode, codeToRef } from '../lib/links.js';
 import * as store from '../lib/store.js';
@@ -34,6 +34,15 @@ ok('duplicates are qty>=2 only', () => {
   const list = B([['e1', 1, mkCard('e1', 2)], ['e2', 3, mkCard('e2', 4)], ['e3', 2, mkCard('e3', 1)]]);
   assert.deepEqual(duplicates(list).map((e) => e.ref), ['e2', 'e3']);
   assert.equal(spareCopies(list).length, 3); // 2 spare of e2 + 1 of e3
+});
+ok('fmtPriceLine: unit, qty line-total, unpriced null (shared binder/set formatter)', () => {
+  assert.equal(fmtPriceLine(mkCard('p1', 0.68)), '$0.68');
+  assert.equal(fmtPriceLine(mkCard('p1', 0.68), 1), '$0.68');
+  assert.equal(fmtPriceLine(mkCard('p1', 0.68), 3), '$0.68 ×3 · $2.04');
+  assert.equal(fmtPriceLine(mkCard('p2', 13.7), 2), '$13.70 ×2 · $27.40');
+  assert.equal(fmtPriceLine(mkCard('p3', null)), null);
+  assert.equal(fmtPriceLine(mkCard('p3', null), 4), null);
+  assert.equal(fmtPriceLine(null), null);
 });
 ok('binderValue weights qty, duplicatesValue counts spares only', () => {
   const list = B([['e1', 2, mkCard('e1', 10)], ['e2', 1, mkCard('e2', 5)]]);

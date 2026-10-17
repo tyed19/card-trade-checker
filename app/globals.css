@@ -194,6 +194,12 @@ input[type='file'] { display: none; }
 .backBtn { font-family: inherit; font-weight: 900; font-size: 17px; background: #1f3a68; color: #fff; border: 3px solid #3b4d74; border-radius: 999px; padding: 8px 16px; cursor: pointer; }
 .progressHead { display: flex; align-items: center; gap: 12px; justify-content: center; font-size: 22px; font-weight: 900; margin-bottom: 14px; }
 .setSlot { position: relative; }
+.setSlot .slotArt { position: relative; }
+.setSlot .slotPrice { display: block; text-align: center; font-weight: 900; font-size: 13px; color: #ffd94d; margin-top: 4px; }
+.setSlot .slotPrice.muted { color: #9fb3d9; }
+.setSlot .slotPrice.none { color: #9fb3d9; font-weight: bold; font-size: 12px; }
+.setValueLine { text-align: center; font-weight: 900; font-size: 17px; margin: -6px 0 12px; }
+.setValueNote { font-weight: bold; font-size: 14px; opacity: .85; }
 .setSlot img { width: 100%; border-radius: 10px; display: block; border: 3px solid rgba(255,255,255,.35); }
 .setSlot.ghost img { filter: grayscale(1); opacity: .32; }
 .setSlot .slotNum { position: absolute; bottom: 6px; left: 6px; background: rgba(10,16,30,.85); border-radius: 8px; padding: 1px 7px; font-weight: 900; font-size: 14px; }
