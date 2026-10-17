@@ -6,6 +6,11 @@ import {
   ScanSession, BinderPicker, IdeasScreen, ProfileScreen, ParentLayer,
   addCandidateToBinder, resolveCandidateRef,
 } from './binder-ui';
+import {
+  IconScales, IconBinder, IconCards, IconCamera, IconCheck,
+  IconX, IconLock, IconSwap, IconSearch, IconHandshake, IconPlus,
+  IconBack, IconRefresh, IconDice, IconStar,
+} from './icons';
 import * as store from '../lib/store';
 import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, FAIR_BAND } from '../lib/logic';
 import { decodePayload } from '../lib/links';
@@ -213,7 +218,15 @@ export default function Home() {
   // True after a card change wiped a verdict: the flow shows a
   // "cards changed — tap CHECK again" note instead of a stale answer.
   const [staleNote, setStaleNote] = useState(false);
-  const [grownOpen, setGrownOpen] = useState(false);
+  // Grown-ups is its own full screen now, not a collapsible at the
+  // bottom of the kid scroll. grownFrom = the kid view we came from
+  // (null = grown-ups closed). It doubles as the context gate: the
+  // trade-only blocks inside the grown-ups screen render only when
+  // grownFrom === 'trade' — entering from the binder keeps the
+  // price-compare table and manual search out, as the owner asked.
+  const [grownFrom, setGrownFrom] = useState(null);
+  const [grownHint, setGrownHint] = useState(false);
+  const grownPress = useRef({ timer: null, opened: false });
   const [manual, setManual] = useState({ name: '', number: '', side: 'mine', results: [], busy: false });
   const fileRefs = { mine: useRef(null), theirs: useRef(null) };
   // Per-side scan sequence: a response may only write state for the
@@ -258,10 +271,44 @@ export default function Home() {
     try { window.scrollTo({ top: 0 }); } catch { /* ignore */ }
   }
 
+  // Kid-bar navigation: speak the label, then go. Only nav taps
+  // speak — other go() calls (back buttons, deep links) stay quiet,
+  // and a nav tap never coincides with verdict speech.
+  function navGo(v, label) {
+    if (label) synthSpeak(label);
+    go(v);
+  }
+
+  // Grown-ups entry: LONG-PRESS (~600ms) opens the screen; a plain
+  // tap just shows the hint. Pointer handlers (not click) so the
+  // press duration is measurable on touch and mouse alike.
+  function grownPressStart() {
+    grownPress.current.opened = false;
+    clearTimeout(grownPress.current.timer);
+    grownPress.current.timer = setTimeout(() => {
+      grownPress.current.opened = true;
+      setGrownHint(false);
+      setGrownFrom(view);
+      try { window.scrollTo({ top: 0 }); } catch { /* ignore */ }
+    }, 600);
+  }
+  function grownPressEnd() {
+    clearTimeout(grownPress.current.timer);
+    if (!grownPress.current.opened) {
+      setGrownHint(true);
+      setTimeout(() => setGrownHint(false), 2400);
+    }
+    grownPress.current.opened = false;
+  }
+  function grownPressCancel() {
+    clearTimeout(grownPress.current.timer);
+    grownPress.current.opened = false;
+  }
+
   function startTradeFromIdeas({ aKid, bKid, aCards, bCards }) {
     setSides({
-      mine: { ...emptySide(), cards: aCards, status: aCards.length ? '⭐ Got it!' : '' },
-      theirs: { ...emptySide(), cards: bCards, status: bCards.length ? '⭐ Got it!' : '' },
+      mine: { ...emptySide(), cards: aCards, status: aCards.length ? 'Got it!' : '' },
+      theirs: { ...emptySide(), cards: bCards, status: bCards.length ? 'Got it!' : '' },
     });
     setSideKids({ mine: aKid, theirs: bKid });
     setVerdict(null);
@@ -277,7 +324,7 @@ export default function Home() {
     setBinderPick(null);
     if (!cand || !kid) return;
     const card = await addCandidateToBinder(kidId, cand);
-    setBinderMsg(card ? `⭐ Added to ${kid.name}'s binder!` : "😕 That card isn't in our card book yet.");
+    setBinderMsg(card ? `Added to ${kid.name}'s binder!` : "That card isn't in our card book yet.");
   }
 
   const setSide = (side, patch) =>
@@ -308,7 +355,7 @@ export default function Home() {
     // changes nothing yet, and a failed/stumped photo must not throw
     // away a good valuation. It clears in cardsChanged() the moment
     // a card actually lands on (or leaves) a side.
-    setSide(side, { busy: true, choices: null, status: '🔎 Looking at your card…' });
+    setSide(side, { busy: true, choices: null, status: 'Looking at your card…' });
     playClip('looking', 'Looking at your card');
     try {
       const upload = await shrinkForUpload(file);
@@ -325,25 +372,25 @@ export default function Home() {
         : [];
       if (choices.length) {
         // Status stays EMPTY here: the choices block renders its own
-        // "Tap your card! 👇" heading — setting it here too printed the
+        // "Tap your card!" heading — setting it here too printed the
         // heading twice (the doubled heading in the user's screenshot).
         setSide(side, { busy: false, choices, status: '' });
         playClip('tap', 'Tap your card!');
       } else if (json.ok && json.stumped) {
         // The photo read fine (a solid number) but the card book came
         // back empty — don't blame the kid's photo for that.
-        setSide(side, { busy: false, choices: null, status: '🤔 That one stumped me! One more try!' });
+        setSide(side, { busy: false, choices: null, status: 'That one stumped me! One more try!' });
         playClip('stumped', 'That one stumped me! Try again!');
       } else if (json.ok) {
-        setSide(side, { busy: false, choices: null, status: '😕 I could not read that one. Flat + bright, try again!' });
+        setSide(side, { busy: false, choices: null, status: 'I could not read that one. Flat + bright, try again!' });
         playClip('unreadable', 'I could not read that one. Try again, flat and bright!');
       } else {
-        setSide(side, { busy: false, choices: null, status: '😕 Something went wrong. Tap TRY AGAIN!' });
+        setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!' });
         playClip('wrong', 'Something went wrong. Try again!');
       }
     } catch {
       if (stale()) return;
-      setSide(side, { busy: false, choices: null, status: '😕 Something went wrong. Tap TRY AGAIN!' });
+      setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!' });
       playClip('wrong', 'Something went wrong. Try again!');
     }
   }
@@ -351,13 +398,13 @@ export default function Home() {
   function pickChoice(side, cand) {
     const s = sides[side];
     if (!s.choices) return;
-    setSide(side, { cards: [...s.cards, cand], choices: null, status: '⭐ Got it!' });
+    setSide(side, { cards: [...s.cards, cand], choices: null, status: 'Got it!' });
     cardsChanged(); // append: existing cards/kid assignment stay put
     playClip('gotIt', 'Got it!');
   }
 
   function noneOfThese(side) {
-    setSide(side, { choices: null, status: 'OK! Take the picture again 📸' });
+    setSide(side, { choices: null, status: 'OK! Take the picture again!' });
     playClip('takeAgain', 'OK! Take the picture again');
   }
 
@@ -395,20 +442,20 @@ export default function Home() {
     });
     let v;
     if (kind === 'fair') {
-      v = { kind: 'fair', face: '😄', big: 'FAIR TRADE!', sub: 'Both sides match. Trade away! 🎉' };
+      v = { kind: 'fair', faceIcon: 'check', big: 'FAIR TRADE!', sub: 'Both sides match. Trade away!' };
       try {
         const confetti = (await import('canvas-confetti')).default;
         confetti({ particleCount: 180, spread: 80, origin: { y: 0.7 } });
       } catch { /* no confetti, no problem */ }
     } else if (kind === 'almost') {
-      v = { kind: 'almost', face: '😐', big: 'ALMOST FAIR!', sub: 'Pretty close! A little more would make it fair.' };
+      v = { kind: 'almost', faceIcon: 'scales', big: 'ALMOST FAIR!', sub: 'Pretty close! A little more would make it fair.' };
     } else {
       const lighterCards = mineTotal < theirsTotal ? mCards : tCards;
       const lighterName = mineTotal < theirsTotal ? 'MY side' : 'THEIR side';
       const avg = lighterCards.length ? lo / lighterCards.length : lo || 1;
       const extra = Math.max(1, Math.round(gap / (avg || 1)));
       v = {
-        kind: 'notfair', face: '😟', big: 'NOT FAIR!',
+        kind: 'notfair', faceIcon: 'x', big: 'NOT FAIR!',
         sub: `${lighterName} needs about ${extra} more card${extra > 1 ? 's' : ''} like theirs!`,
         extra, lighterName,
       };
@@ -437,8 +484,8 @@ export default function Home() {
 
   function loadDemo() {
     setSides({
-      mine: { ...emptySide(), cards: [DEMO.mine], status: '⭐ Got it!' },
-      theirs: { ...emptySide(), cards: [DEMO.theirs], status: '⭐ Got it!' },
+      mine: { ...emptySide(), cards: [DEMO.mine], status: 'Got it!' },
+      theirs: { ...emptySide(), cards: [DEMO.theirs], status: 'Got it!' },
     });
     setVerdict(null);
     setStaleNote(false);
@@ -546,18 +593,17 @@ export default function Home() {
 
   const bothReady = sides.mine.cards.length > 0 && sides.theirs.cards.length > 0;
 
-  // The grown-ups box is context-aware: its trade-only blocks (the
+  // Grown-ups screen context: the trade-only blocks inside it (the
   // "What the app found" price-compare table and the manual search)
-  // render ONLY in the trade view. In binder/set/scan views they
-  // would report on a trade the user isn't looking at — and manual
-  // search even ADDS cards to a trade side. Ideas/profile are
-  // non-trade views too, so they hide as well. ParentLayer (Kids &
-  // binders, Parent view, ⚖️ Fairness cushion) shows in every view,
-  // as does the price-provenance note below: binder screens show
-  // prices from the same catalog, so it explains those numbers too,
-  // and its cushion sentence points at the setting right under it,
-  // which stays visible in both contexts.
-  const inTradeView = view === 'trade';
+  // render only when the grown-ups screen was entered FROM the trade
+  // view (grownFrom === 'trade'). Entering from the binder keeps them
+  // out — they report on a trade the user isn't looking at, and
+  // manual search even ADDS cards to a trade side. ParentLayer (Kids
+  // & binders, Parent view, Fairness cushion) shows either way, as
+  // does the price-provenance note: binder screens show prices from
+  // the same catalog, so it explains those numbers too.
+  const grownOpen = grownFrom !== null;
+  const grownTradeCtx = grownFrom === 'trade';
 
   const Panel = ({ side, label, cls }) => {
     const s = sides[side];
@@ -579,7 +625,7 @@ export default function Home() {
               >{k.emoji}</button>
             ))}
             {sideKid && (
-              <button className="pickerBtn" onClick={() => setPickerSide(side)}>📚 PICK FROM BINDER</button>
+              <button className="pickerBtn" onClick={() => setPickerSide(side)}><IconBinder size={18} /> PICK FROM BINDER</button>
             )}
           </div>
         )}
@@ -591,13 +637,15 @@ export default function Home() {
           onChange={(e) => { onPhoto(side, e.target.files && e.target.files[0]); e.target.value = ''; }}
         />
         <button className="photoBtn" disabled={s.busy} onClick={() => fileRefs[side].current && fileRefs[side].current.click()}>
-          {s.busy ? '👀 LOOKING…' : s.cards.length ? '➕ ADD A CARD' : '📸 TAKE A PICTURE'}
+          {s.busy ? 'LOOKING…' : s.cards.length
+            ? <><IconPlus size={30} /> ADD A CARD</>
+            : <><IconCamera size={30} /> TAKE A PICTURE</>}
         </button>
         <div className="status">{s.status}</div>
 
         {s.choices && s.choices.length > 0 && (
           <div className="choices">
-            <div className="q">Tap your card! 👇</div>
+            <div className="q">Tap your card!</div>
             <div className={`choiceGrid${s.choices.length === 1 ? ' one' : ''}`}>
               {s.choices.map((c, i) => (
                 <button className="choiceBtn" key={c.id + '-' + i} onClick={() => pickChoice(side, c)}>
@@ -605,7 +653,7 @@ export default function Home() {
                 </button>
               ))}
             </div>
-            <button className="noneBtn" onClick={() => noneOfThese(side)}>🚫 NONE OF THESE</button>
+            <button className="noneBtn" onClick={() => noneOfThese(side)}><IconX /> NONE OF THESE</button>
           </div>
         )}
 
@@ -616,7 +664,7 @@ export default function Home() {
                 {c.image && <img src={c.image} alt={c.name} />}
                 <button aria-label="remove" onClick={() => removeCard(side, i)}>×</button>
                 {binderState.kids.length > 0 && (
-                  <button className="addBtn" aria-label="add to binder" title="Add to a binder" onClick={() => setBinderPick(c)}>➕</button>
+                  <button className="addBtn" aria-label="add to binder" title="Add to a binder" onClick={() => setBinderPick(c)}><IconPlus size={16} /></button>
                 )}
               </div>
             ))}
@@ -627,7 +675,7 @@ export default function Home() {
             kid={sideKid}
             usedCounts={usedCounts}
             onPick={(card) => {
-              setSide(side, { cards: [...sides[side].cards, card], status: '⭐ Got it!' });
+              setSide(side, { cards: [...sides[side].cards, card], status: 'Got it!' });
               cardsChanged(); // binder picks append, same as photo picks
             }}
             onClose={() => setPickerSide(null)}
@@ -639,74 +687,93 @@ export default function Home() {
 
   return (
     <main>
-      <h1 className="title">⚡ Card Trade Checker ⚡</h1>
+      <h1 className="title"><IconSwap size={34} /> Card Trade Checker <IconSwap size={34} /></h1>
       <div className="steps">
-        <span>📸 Take a picture</span><span>👉 Tap your card</span><span>⚖️ Check!</span>
+        <span><IconCamera size={19} /> Take a picture</span><span><IconCards size={19} /> Tap your card</span><span><IconScales size={19} /> Check!</span>
       </div>
 
-      <KidBar state={binderState} view={view} go={go} />
-      {binderState.kids.length === 0 && (
-        <div className="hintBar">👨‍👩‍👧 Grown-ups: add your kids in the section below to unlock 📚 binders, 💡 trade ideas and ⭐ badges!</div>
+      {!grownOpen && <KidBar state={binderState} view={view} go={go} onNav={navGo} />}
+      {!grownOpen && (
+        <div className="grownEntryRow">
+          <button
+            className="grownEntryBtn"
+            onPointerDown={grownPressStart}
+            onPointerUp={grownPressEnd}
+            onPointerLeave={grownPressCancel}
+            onPointerCancel={grownPressCancel}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <IconLock size={16} /> Grown-ups
+          </button>
+          {grownHint && <div className="grownHint">Hold to open — grown-ups only</div>}
+        </div>
+      )}
+      {binderState.kids.length === 0 && !grownOpen && (
+        <div className="hintBar">Grown-ups: press and HOLD the Grown-ups button above to add your kids and unlock binders, trade ideas and badges!</div>
       )}
       {binderMsg && <div className="binderMsg">{binderMsg}</div>}
-      {importOffer && (
+      {importOffer && !grownOpen && (
         <div className="importBanner">
-          <div>📚 <strong>{importOffer.kid || 'A friend'}</strong> shared a binder: {importOffer.entries.reduce((a, e) => a + e.qty, 0)} cards!</div>
+          <div><IconBinder size={20} /> <strong>{importOffer.kid || 'A friend'}</strong> shared a binder: {importOffer.entries.reduce((a, e) => a + e.qty, 0)} cards!</div>
           <div className="importRow">
             <span>Add to:</span>
             {binderState.kids.map((k) => (
               <button key={k.id} className="goBtnSmall" onClick={() => {
                 store.importBinder(k.id, importOffer.entries);
                 setImportOffer(null);
-                setBinderMsg(`⭐ Binder added to ${k.name}!`);
+                setBinderMsg(`Binder added to ${k.name}!`);
               }}>{k.emoji} {k.name}</button>
             ))}
             <button className="goBtnSmall" onClick={() => {
               const k = store.addKid(importOffer.kid || 'New kid');
               store.importBinder(k.id, importOffer.entries);
               setImportOffer(null);
-              setBinderMsg(`⭐ Binder added for ${k.name}!`);
-            }}>🆕 New kid{importOffer.kid ? ` (${importOffer.kid})` : ''}</button>
+              setBinderMsg(`Binder added for ${k.name}!`);
+            }}><IconPlus size={17} /> New kid{importOffer.kid ? ` (${importOffer.kid})` : ''}</button>
             <button className="goBtnSmall" onClick={() => setImportOffer(null)}>No thanks</button>
           </div>
         </div>
       )}
 
-      {view === 'binder' && <BinderHome kid={activeKid} go={go} />}
-      {view === 'set' && <SetPage kid={activeKid} setKey={setKey} go={go} />}
-      {view === 'scan' && <ScanSession kid={activeKid} go={go} shrinkForUpload={shrinkForUpload} playClip={playClip} />}
-      {view === 'ideas' && <IdeasScreen go={go} onStartTrade={startTradeFromIdeas} />}
-      {view === 'profile' && <ProfileScreen kid={activeKid} go={go} />}
+      {!grownOpen && view === 'binder' && <BinderHome kid={activeKid} go={go} kidCount={binderState.kids.length} />}
+      {!grownOpen && view === 'set' && <SetPage kid={activeKid} setKey={setKey} go={go} />}
+      {!grownOpen && view === 'scan' && <ScanSession kid={activeKid} go={go} shrinkForUpload={shrinkForUpload} playClip={playClip} />}
+      {!grownOpen && view === 'ideas' && <IdeasScreen go={go} onStartTrade={startTradeFromIdeas} />}
+      {!grownOpen && view === 'profile' && <ProfileScreen kid={activeKid} go={go} />}
 
-      {view === 'trade' && (
+      {!grownOpen && view === 'trade' && (
       <>
       <div className="panels">
-        <Panel side="mine" label="🔵 MY CARD" cls="mine" />
-        <Panel side="theirs" label="🔴 THEIR CARD" cls="theirs" />
+        <Panel side="mine" label={<><span className="panelDot mineDot" /> MY CARD</>} cls="mine" />
+        <Panel side="theirs" label={<><span className="panelDot theirsDot" /> THEIR CARD</>} cls="theirs" />
       </div>
 
       <div className="demoRow">
-        <button className="demoBtn" onClick={loadDemo}>🎲 Pretend cards</button>
+        <button className="demoBtn" onClick={loadDemo}><IconDice size={20} /> Pretend cards</button>
       </div>
 
       {staleNote && !verdict && (
-        <div className="staleNote">🔄 Cards changed! Tap ⚖️ CHECK THE TRADE to get the new answer!</div>
+        <div className="staleNote"><IconRefresh size={20} /> Cards changed! Tap CHECK THE TRADE to get the new answer!</div>
       )}
 
       <div className="checkWrap">
         <button className="checkBtn" disabled={!bothReady} onClick={() => checkTrade()}>
-          ⚖️ CHECK THE TRADE
+          <IconScales size={38} /> CHECK THE TRADE
         </button>
       </div>
 
       {verdict && (
         <div className={`verdict ${verdict.kind}`}>
-          <div className="face">{verdict.face}</div>
+          <div className="face">
+            {verdict.faceIcon === 'check' && <IconCheck size={72} />}
+            {verdict.faceIcon === 'scales' && <IconScales size={72} />}
+            {verdict.faceIcon === 'x' && <IconX size={72} />}
+          </div>
           <div className="big">{verdict.big}</div>
           <div className="sub">{verdict.sub}</div>
           {verdict.kind !== 'fair' && balance && (
             <div className="balanceBox">
-              <div className="balanceHead">⚖️ MAKE IT FAIR{balance.kid ? ` — ${balance.kid.emoji} ${balance.kid.name}'s doubles` : ''}</div>
+              <div className="balanceHead"><IconScales size={25} /> MAKE IT FAIR{balance.kid ? ` — ${balance.kid.emoji} ${balance.kid.name}'s doubles` : ''}</div>
               <div className="balanceCards">
                 {balance.cards.map((x, i) => (
                   <span key={i} className="balanceCard">
@@ -719,24 +786,24 @@ export default function Home() {
                   ? 'Add these to make it fair!'
                   : 'This is the closest we can get — it still won\'t be quite fair.'}
               </div>
-              <button className="balanceBtn" onClick={applyBalance}>➕ ADD THESE!</button>
+              <button className="balanceBtn" onClick={applyBalance}><IconPlus /> ADD THESE!</button>
             </div>
           )}
           {verdict.kind === 'fair' && !tradedDone && (
             <div className="tradedRow">
-              <button className="tradedBtn" onClick={() => weTraded(false)}>🤝 We traded!</button>
+              <button className="tradedBtn" onClick={() => weTraded(false)}><IconHandshake /> We traded!</button>
               {sideKids.mine && sideKids.theirs && sideKids.mine !== sideKids.theirs && (
-                <button className="tradedBtn move" onClick={() => weTraded(true)}>🔀 We traded — move the cards between binders too</button>
+                <button className="tradedBtn move" onClick={() => weTraded(true)}><IconSwap size={20} /> We traded — move the cards between binders too</button>
               )}
             </div>
           )}
-          {verdict.kind === 'fair' && tradedDone && <div className="tradedDone">⭐ Counted! Nice trading!</div>}
+          {verdict.kind === 'fair' && tradedDone && <div className="tradedDone"><IconStar size={22} /> Counted! Nice trading!</div>}
           <div className="addMoreRow">
             <span>Not done yet? Add more cards — nothing here is cleared:</span>
-            <button className="againBtn addMore" onClick={() => fileRefs.mine.current && fileRefs.mine.current.click()}>➕ MY side</button>
-            <button className="againBtn addMore" onClick={() => fileRefs.theirs.current && fileRefs.theirs.current.click()}>➕ THEIR side</button>
+            <button className="againBtn addMore" onClick={() => fileRefs.mine.current && fileRefs.mine.current.click()}><IconPlus size={20} /> MY side</button>
+            <button className="againBtn addMore" onClick={() => fileRefs.theirs.current && fileRefs.theirs.current.click()}><IconPlus size={20} /> THEIR side</button>
           </div>
-          <button className="againBtn" onClick={resetAll}>🔁 New trade</button>
+          <button className="againBtn" onClick={resetAll}><IconRefresh size={22} /> New trade</button>
         </div>
       )}
       </>
@@ -745,20 +812,19 @@ export default function Home() {
       {binderPick && (
         <div className="pickerOverlay">
           <div className="pickerSheet">
-            <h3>📚 Add “{binderPick.name}” to whose binder?</h3>
+            <h3><IconBinder size={22} /> Add “{binderPick.name}” to whose binder?</h3>
             <KidSwitcher kids={binderState.kids} value={null} onChange={chooseBinderKid} big />
             <button className="againBtn" onClick={() => setBinderPick(null)}>Cancel</button>
           </div>
         </div>
       )}
 
-      <div className="grownups">
-        <button onClick={() => setGrownOpen(!grownOpen)}>
-          Grown-ups: card names, prices &amp; manual search {grownOpen ? '▲' : '▼'}
-        </button>
-        {grownOpen && (
+      {grownOpen && (
+        <div className="grownScreen">
+          <button className="backBtn" onClick={() => setGrownFrom(null)}><IconBack size={19} /> Back</button>
+          <h2 className="screenTitle"><IconLock /> Grown-ups</h2>
           <div className="grownBox">
-            {inTradeView && (
+            {grownTradeCtx && (
             <>
             <strong>What the app found</strong>
             <table>
@@ -772,7 +838,7 @@ export default function Home() {
                       <td>{c.number}</td>
                       <td>{c.price != null ? '$' + c.price.toFixed(2) : '—'}</td>
                       <td>{binderState.kids.length > 0 && (
-                        <button className="go" onClick={() => setBinderPick(c)}>➕ Binder</button>
+                        <button className="go" onClick={() => setBinderPick(c)}><IconPlus size={15} /> Binder</button>
                       )}</td>
                     </tr>
                   ))
@@ -812,7 +878,7 @@ export default function Home() {
                 <option value="theirs">Add to THEIR side</option>
               </select>
               <button className="go" disabled={manual.busy} onClick={manualSearch}>
-                {manual.busy ? 'Searching…' : 'Search'}
+                {manual.busy ? 'Searching…' : <><IconSearch size={16} /> Search</>}
               </button>
             </div>
             {manual.results.map((c) => (
@@ -821,7 +887,7 @@ export default function Home() {
                 <span>{c.name} — {c.set} #{c.number} — {c.price != null ? '$' + c.price.toFixed(2) : 'no price'}</span>
                 <button className="go" onClick={() => manualAdd(c)}>Add</button>
                 {binderState.kids.length > 0 && (
-                  <button className="go" onClick={() => setBinderPick(c)}>➕ Binder</button>
+                  <button className="go" onClick={() => setBinderPick(c)}><IconPlus size={15} /> Binder</button>
                 )}
               </div>
             ))}
@@ -835,22 +901,22 @@ export default function Home() {
                 <>Verdict: your fairness cushion is set to {fmtCushion(normalizeFairness(binderState.fairness).cents)} —
                 a trade is fair when the two sides are within that much of each other, almost fair within 3x that.
                 The cushion widens x1.5 when a EUR-priced (Japanese) card is part of the trade.
-                Change it under ⚖️ Fairness cushion below.</>
+                Change it under Fairness cushion below.</>
               ) : (
                 <>Verdict: within 15% is fair, within 40% is almost fair —
                 both windows widen x1.5 when a EUR-priced (Japanese) card is part of the trade.
-                You can switch to a fixed-dollar window under ⚖️ Fairness cushion below.</>
+                You can switch to a fixed-dollar window under Fairness cushion below.</>
               )}
             </p>
-            {inTradeView && verdict && verdict.ruleNote && <p style={{ opacity: 0.9 }}>⚖️ {verdict.ruleNote}</p>}
+            {grownTradeCtx && verdict && verdict.ruleNote && <p style={{ opacity: 0.9 }}><IconScales size={17} /> {verdict.ruleNote}</p>}
             <ParentLayer onOpenBinder={(kidId) => {
               store.setActiveKid(kidId);
-              setGrownOpen(false);
+              setGrownFrom(null);
               go('binder');
             }} />
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -7,7 +7,12 @@ body {
   min-height: 100vh;
 }
 
+/* Custom SVG icons (app/icons.js): inherit the surrounding color,
+   sit on the text baseline, never stretch a layout. */
+.icn { display: inline-block; vertical-align: -0.16em; flex: none; }
+
 h1.title {
+  display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
   text-align: center;
   font-size: clamp(26px, 7vw, 40px);
   margin: 14px 8px 4px;
@@ -19,7 +24,7 @@ h1.title {
   display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;
   margin: 6px 8px 14px; font-size: clamp(14px, 4vw, 18px); font-weight: bold;
 }
-.steps span { background: #1f3a68; padding: 6px 12px; border-radius: 999px; }
+.steps span { background: #1f3a68; padding: 6px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
 
 .panels { display: flex; flex-direction: column; gap: 16px; padding: 0 12px; max-width: 760px; margin: 0 auto; }
 @media (min-width: 700px) { .panels { flex-direction: row; } .panel { flex: 1; } }
@@ -31,6 +36,9 @@ h1.title {
 .panel.mine { background: #1e4fa3; border-color: #6fb3ff; }
 .panel.theirs { background: #a31621; border-color: #ff8fa3; }
 .panel h2 { margin: 2px 0 10px; font-size: clamp(24px, 6.5vw, 32px); text-align: center; }
+.panelDot { display: inline-block; width: 20px; height: 20px; border-radius: 50%; vertical-align: -2px; margin-right: 4px; border: 3px solid rgba(255,255,255,.65); }
+.panelDot.mineDot { background: #2a75bb; }
+.panelDot.theirsDot { background: #e63946; }
 
 .photoBtn {
   display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -57,6 +65,7 @@ input[type='file'] { display: none; }
 .choiceBtn img { width: min(26vw, 150px); border-radius: 10px; display: block; }
 .choiceGrid.one .choiceBtn img { width: min(62vw, 240px); }
 .noneBtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
   margin-top: 14px; width: 100%; max-width: 340px; padding: 18px 8px; border: none; border-radius: 16px; cursor: pointer;
   font-size: clamp(22px, 6.5vw, 30px); font-weight: 900; color: #fff;
   background: #e63946; box-shadow: 0 5px 0 #96222d;
@@ -73,6 +82,7 @@ input[type='file'] { display: none; }
 
 .checkWrap { padding: 18px 12px 6px; max-width: 760px; margin: 0 auto; }
 .checkBtn {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
   width: 100%; padding: 26px 10px; border: none; border-radius: 20px; cursor: pointer;
   background: #2fbf71; color: #fff; font-size: clamp(28px, 8.5vw, 42px); font-weight: 900;
   box-shadow: 0 6px 0 #1e7d4a;
@@ -84,13 +94,14 @@ input[type='file'] { display: none; }
   margin: 18px 12px; padding: 26px 14px; border-radius: 24px; text-align: center;
   max-width: 760px; margin-left: auto; margin-right: auto;
 }
-.verdict .face { font-size: 76px; line-height: 1; }
+.verdict .face { line-height: 0; }
 .verdict .big { font-size: clamp(36px, 11vw, 58px); font-weight: 900; margin: 8px 0; }
 .verdict .sub { font-size: clamp(19px, 5.5vw, 26px); font-weight: bold; }
 .verdict.fair { background: #14532d; border: 5px solid #2fbf71; }
 .verdict.almost { background: #713f12; border: 5px solid #f5b301; }
 .verdict.notfair { background: #7f1d1d; border: 5px solid #e63946; }
 .againBtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   margin-top: 16px; padding: 16px 26px; border: none; border-radius: 14px; cursor: pointer;
   background: #ffcb05; color: #14213d; font-size: 22px; font-weight: 900;
 }
@@ -104,11 +115,20 @@ input[type='file'] { display: none; }
   color: #ffcb05; font-size: 18px; font-weight: 900; cursor: pointer;
 }
 
-.grownups { max-width: 760px; margin: 26px auto 40px; padding: 0 12px; }
-.grownups > button {
-  width: 100%; padding: 12px; background: #22314f; color: #cbd5e1; border: 2px solid #3b4d74;
-  border-radius: 12px; font-size: 16px; cursor: pointer;
+/* Grown-ups: a discreet long-press entry in the kid UI, opening a
+   full screen of its own (the kid scroll no longer contains it). */
+.grownEntryRow { max-width: 760px; margin: 2px auto 10px; padding: 0 12px; text-align: center; }
+.grownEntryBtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: inherit; font-weight: bold; font-size: 14.5px; cursor: pointer;
+  background: transparent; color: #8ea3c8; border: 2px solid #2c3d5f;
+  border-radius: 999px; padding: 7px 15px;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
+.grownEntryBtn:active { background: #22314f; color: #cbd5e1; }
+.grownHint { margin-top: 6px; font-weight: bold; font-size: 14.5px; color: #f5b301; }
+.grownScreen { max-width: 760px; margin: 0 auto 40px; padding: 0 12px; }
+.grownScreen .screenTitle { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .grownBox { background: #0f1a30; border: 2px solid #3b4d74; border-radius: 12px; padding: 14px; margin-top: 10px; font-size: 15px; line-height: 1.5; }
 .grownBox table { width: 100%; border-collapse: collapse; margin: 8px 0; }
 .grownBox td, .grownBox th { padding: 4px 6px; border-bottom: 1px solid #2c3d5f; text-align: left; }
@@ -118,6 +138,7 @@ input[type='file'] { display: none; }
 }
 .grownBox .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .grownBox .go {
+  display: inline-flex; align-items: center; gap: 5px;
   padding: 10px 16px; border-radius: 8px; border: none; background: #2a75bb; color: #fff;
   font-size: 16px; font-weight: bold; cursor: pointer;
 }
@@ -136,11 +157,13 @@ input[type='file'] { display: none; }
 .kidAvatar .kidName { font-size: 13px; font-weight: bold; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kidAvatar.sel { background: #2a75bb; box-shadow: 0 0 0 3px #ffcb05; }
 .kidSwitch.big .kidEmoji { font-size: 44px; }
-.kidNav { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+.kidNav { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
 .kidNav button {
+  flex: 1 1 0; min-height: 68px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   font-family: inherit; font-weight: 900; font-size: clamp(15px, 4.4vw, 19px);
-  background: #1f3a68; color: #fff; border: 3px solid #3b4d74; border-radius: 999px;
-  padding: 8px 14px; cursor: pointer;
+  background: #1f3a68; color: #fff; border: 3px solid #3b4d74; border-radius: 18px;
+  padding: 8px 6px; cursor: pointer;
 }
 .kidNav button.on { background: #ffcb05; color: #14213d; border-color: #c79a00; }
 .kidNav button:disabled { opacity: .45; }
@@ -149,6 +172,7 @@ input[type='file'] { display: none; }
 .importBanner { max-width: 760px; margin: 0 auto 12px; padding: 12px; background: #4c1d95; border: 4px solid #a78bfa; border-radius: 16px; text-align: center; font-size: 17px; }
 .importRow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 10px; align-items: center; }
 .goBtnSmall {
+  display: inline-flex; align-items: center; gap: 6px;
   font-family: inherit; font-weight: 900; font-size: 16px; cursor: pointer;
   background: #ffcb05; color: #14213d; border: 3px solid #c79a00; border-radius: 999px; padding: 8px 14px;
 }
@@ -156,7 +180,18 @@ input[type='file'] { display: none; }
 .screenTitle { text-align: center; font-size: clamp(24px, 6.5vw, 32px); margin: 8px 0 12px; }
 .screenNote { text-align: center; font-size: clamp(17px, 5vw, 21px); font-weight: bold; padding: 18px 10px; max-width: 760px; margin: 0 auto; }
 .chipRow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px; }
-.chip { background: #1f3a68; border: 3px solid #3b4d74; border-radius: 999px; padding: 7px 13px; font-weight: 900; font-size: 16px; color: #fff; }
+.chip { display: inline-flex; align-items: center; gap: 6px; background: #1f3a68; border: 3px solid #3b4d74; border-radius: 999px; padding: 7px 13px; font-weight: 900; font-size: 16px; color: #fff; }
+.ideasBtn {
+  display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%;
+  font-family: inherit; font-weight: 900; font-size: 21px; cursor: pointer;
+  background: #2a75bb; color: #fff; border: 3px solid #6fb3ff; border-radius: 16px;
+  padding: 13px 10px; margin-bottom: 4px;
+}
+.ideasBtn:active { transform: translateY(2px); }
+.ideasHint { text-align: center; font-weight: bold; opacity: .85; margin-bottom: 12px; font-size: 15px; }
+.binderAllHead { margin: 6px 0 8px; font-size: 20px; }
+.badgesWrap { margin-top: 26px; border-top: 3px solid #2c3d5f; padding-top: 4px; }
+.badgeStarEmpty { opacity: .35; }
 .chip.btn { cursor: pointer; font-family: inherit; }
 .chip.btn.on { background: #2a75bb; border-color: #ffcb05; }
 .setChips { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
@@ -188,10 +223,10 @@ input[type='file'] { display: none; }
 .qtySheet { position: sticky; bottom: 10px; background: #0f1a30; border: 3px solid #ffcb05; border-radius: 16px; padding: 12px; margin-top: 14px; text-align: center; }
 .qtyName { font-weight: 900; font-size: 18px; margin-bottom: 8px; }
 .qtyRow { display: flex; gap: 10px; justify-content: center; align-items: center; }
-.qtyRow button { font-family: inherit; font-size: 22px; font-weight: 900; background: #2a75bb; color: #fff; border: 3px solid #6fb3ff; border-radius: 12px; padding: 6px 16px; cursor: pointer; }
+.qtyRow button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-family: inherit; font-size: 22px; font-weight: 900; background: #2a75bb; color: #fff; border: 3px solid #6fb3ff; border-radius: 12px; padding: 6px 16px; cursor: pointer; }
 .qtyRow span { font-size: 24px; font-weight: 900; }
 .qtyRow .removeBtn { background: #a31621; border-color: #ff8fa3; font-size: 17px; }
-.backBtn { font-family: inherit; font-weight: 900; font-size: 17px; background: #1f3a68; color: #fff; border: 3px solid #3b4d74; border-radius: 999px; padding: 8px 16px; cursor: pointer; }
+.backBtn { display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-weight: 900; font-size: 17px; background: #1f3a68; color: #fff; border: 3px solid #3b4d74; border-radius: 999px; padding: 8px 16px; cursor: pointer; }
 .progressHead { display: flex; align-items: center; gap: 12px; justify-content: center; font-size: 22px; font-weight: 900; margin-bottom: 14px; }
 .setSlot { position: relative; }
 .setSlot .slotArt { position: relative; }
@@ -217,9 +252,10 @@ input[type='file'] { display: none; }
 .sideKidLabel { font-weight: 900; font-size: 15px; opacity: .85; }
 .sideKidBtn { font-size: 24px; background: #0f1a30; border: 3px solid #3b4d74; border-radius: 999px; width: 46px; height: 46px; cursor: pointer; line-height: 1; }
 .sideKidBtn.sel { background: #2a75bb; box-shadow: 0 0 0 3px #ffcb05; }
-.pickerBtn { font-family: inherit; font-weight: 900; font-size: 15.5px; background: #ffcb05; color: #14213d; border: 3px solid #c79a00; border-radius: 999px; padding: 9px 13px; cursor: pointer; margin-left: 4px; }
+.pickerBtn { display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-weight: 900; font-size: 15.5px; background: #ffcb05; color: #14213d; border: 3px solid #c79a00; border-radius: 999px; padding: 9px 13px; cursor: pointer; margin-left: 4px; }
 .thumb .addBtn {
   position: absolute; bottom: -8px; right: -8px; width: 30px; height: 30px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
   background: #14532d; color: #fff; border: 2px solid #2fbf71; font-size: 15px; cursor: pointer; line-height: 1;
 }
 .balanceBox { background: rgba(10,16,30,.45); border: 3px dashed #ffcb05; border-radius: 16px; padding: 12px; margin: 14px auto 4px; max-width: 520px; }
@@ -228,11 +264,13 @@ input[type='file'] { display: none; }
 .balanceCard img { width: min(24vw, 110px); border-radius: 10px; border: 3px solid #ffcb05; display: block; }
 .balanceNote { font-weight: bold; font-size: clamp(16px, 4.8vw, 20px); }
 .balanceBtn {
+  display: inline-flex; align-items: center; gap: 8px;
   font-family: inherit; font-weight: 900; font-size: clamp(19px, 5.5vw, 24px); cursor: pointer;
   background: #ffcb05; color: #14213d; border: 3px solid #c79a00; border-radius: 999px; padding: 10px 22px; margin-top: 10px;
 }
 .tradedRow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
 .tradedBtn {
+  display: inline-flex; align-items: center; gap: 8px;
   font-family: inherit; font-weight: 900; font-size: clamp(18px, 5vw, 22px); cursor: pointer;
   background: #2fbf71; color: #06281a; border: 3px solid #14532d; border-radius: 999px; padding: 10px 20px;
 }
@@ -253,7 +291,7 @@ input[type='file'] { display: none; }
 .profileName { font-size: 30px; font-weight: 900; }
 .badgeCard { background: #1d3557; border: 3px solid #ffcb05; border-radius: 20px; padding: 16px; text-align: center; margin-top: 14px; }
 .badgeTitle { font-weight: 900; font-size: 19px; letter-spacing: 1px; }
-.badgeStars { font-size: 30px; margin: 4px 0; }
+.badgeStars { display: flex; gap: 4px; justify-content: center; align-items: center; color: #ffcb05; margin: 6px 0; }
 .badgeBig { font-size: 64px; font-weight: 900; line-height: 1; color: #ffcb05; }
 .badgeName { font-size: 22px; font-weight: 900; }
 .badgeNext { opacity: .85; font-weight: bold; margin-top: 4px; }

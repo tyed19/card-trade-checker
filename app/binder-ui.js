@@ -19,6 +19,12 @@ import {
 // "1 kind" / "3 kinds" — the count word agrees with the number.
 const kindWord = (n) => `${n} kind${n === 1 ? '' : 's'}`;
 import { giftPath, binderImportPath } from '../lib/links';
+import {
+  IconScales, IconBinder, IconCards, IconCardPlus, IconCamera, IconBulb,
+  IconStar, IconCheck, IconX, IconGift, IconSwap, IconTrash,
+  IconPlus, IconMinus, IconBack, IconCompass, IconCrown, IconTag, IconPlay,
+  IconLink,
+} from './icons';
 
 // ---------- store + resolution hooks ----------
 
@@ -152,9 +158,16 @@ export function KidSwitcher({ kids, value, onChange, big = false }) {
   );
 }
 
-export function KidBar({ state, view, go }) {
+// Kid navigation: kid switcher on top, then THREE big buttons.
+// Trade Ideas and Badges used to be tabs of their own — they now
+// live inside the binder (a Trade Ideas button and a badges section
+// at the bottom of BinderHome). Nav taps speak their label via the
+// onNav callback page.js passes in (falls back to plain navigation).
+export function KidBar({ state, view, go, onNav }) {
   const active = state.kids.find((k) => k.id === state.activeKidId) || state.kids[0];
   if (!state.kids.length) return null;
+  const nav = onNav || ((v) => go(v));
+  const binderOn = view === 'binder' || view === 'set' || view === 'ideas' || view === 'profile';
   return (
     <div className="kidBar">
       <KidSwitcher
@@ -163,11 +176,15 @@ export function KidBar({ state, view, go }) {
         onChange={(id) => { store.setActiveKid(id); if (view === 'set') go('binder'); }}
       />
       <div className="kidNav">
-        <button className={view === 'trade' ? 'on' : ''} onClick={() => go('trade')}>⚖️ Trade</button>
-        <button className={view === 'binder' || view === 'set' ? 'on' : ''} onClick={() => go('binder')}>📚 Binder</button>
-        <button className={view === 'scan' ? 'on' : ''} onClick={() => go('scan')}>➕ Add cards</button>
-        <button className={view === 'ideas' ? 'on' : ''} onClick={() => go('ideas')} disabled={state.kids.length < 2}>💡 Ideas</button>
-        <button className={view === 'profile' ? 'on' : ''} onClick={() => go('profile')}>⭐ Me</button>
+        <button className={view === 'trade' ? 'on' : ''} onClick={() => nav('trade', 'Trade!')}>
+          <IconScales size={30} /><span>Trade</span>
+        </button>
+        <button className={binderOn ? 'on' : ''} onClick={() => nav('binder', 'My Binder!')}>
+          <IconBinder size={30} /><span>My Binder</span>
+        </button>
+        <button className={view === 'scan' ? 'on' : ''} onClick={() => nav('scan', 'Add Cards!')}>
+          <IconCardPlus size={30} /><span>Add Cards</span>
+        </button>
       </div>
     </div>
   );
@@ -193,7 +210,8 @@ export function CardTile({ entry, onTap, badge, showPrice = false }) {
 
 // ---------- Binder home ----------
 
-export function BinderHome({ kid, go }) {
+export function BinderHome({ kid, go, kidCount = 0 }) {
+  const state = useStoreState();
   const { list, loading } = useKidBinder(kid ? kid.id : null);
   const [doublesOnly, setDoublesOnly] = useState(false);
   const [selRef, setSelRef] = useState(null);
@@ -202,23 +220,27 @@ export function BinderHome({ kid, go }) {
   // one summation, so the kid binder total and the parent number can
   // never drift apart.
   const value = useMemo(() => binderValue(list), [list]);
-  if (!kid) return <div className="screenNote">Add a kid in the grown-ups section below first! 👇</div>;
-  const shown = doublesOnly ? duplicates(list) : list;
-  const bySet = new Map();
-  for (const e of shown) {
-    const k = `${e.card.lang}:${e.card.setId}`;
-    if (!bySet.has(k)) bySet.set(k, { name: e.card.set, items: [] });
-    bySet.get(k).items.push(e);
-  }
+  // "All my cards": ONE flat grid, most recently added first. The
+  // stored binder map carries addedAt per ref (binderList drops it),
+  // so sort the resolved list against the raw map. Set grouping is
+  // demoted to the set chips above, which open the set pages.
+  const allCards = useMemo(() => {
+    if (!kid) return list;
+    const raw = state.binders[kid.id] || {};
+    return [...list].sort((a, b) => ((raw[b.ref] && raw[b.ref].addedAt) || 0) - ((raw[a.ref] && raw[a.ref].addedAt) || 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list, kid, state.binders]);
+  if (!kid) return <div className="screenNote">Add a kid in the grown-ups section first!</div>;
+  const shown = doublesOnly ? duplicates(list) : allCards;
   const sel = selRef ? list.find((e) => e.ref === selRef) : null;
   return (
     <div className="screen">
       <h2 className="screenTitle">{kid.emoji} {kid.name}&rsquo;s Binder</h2>
       {list.length > 0 && (
         <div className="binderTotal">
-          <div className="binderTotalMain">💰 Binder total: ${value.total.toFixed(2)}</div>
+          <div className="binderTotalMain"><IconTag /> Binder total: ${value.total.toFixed(2)}</div>
           {duplicates(list).length > 0 && (
-            <div className="binderTotalSub">🔁 Doubles (trade pile): ${value.duplicatesValue.toFixed(2)}</div>
+            <div className="binderTotalSub"><IconSwap size={18} /> Doubles (trade pile): ${value.duplicatesValue.toFixed(2)}</div>
           )}
           {value.unpriced > 0 && (
             <div className="binderTotalNote">
@@ -228,12 +250,19 @@ export function BinderHome({ kid, go }) {
         </div>
       )}
       <div className="chipRow">
-        <span className="chip">🃏 {list.reduce((a, e) => a + e.qty, 0)} cards</span>
+        <span className="chip"><IconCards size={18} /> {list.reduce((a, e) => a + e.qty, 0)} cards</span>
         <button className={`chip btn${doublesOnly ? ' on' : ''}`} onClick={() => setDoublesOnly(!doublesOnly)}>
-          🔁 Doubles (trade pile){doublesOnly ? ' ✓' : ''}
+          <IconSwap size={18} /> Doubles (trade pile){doublesOnly ? ' (on)' : ''}
         </button>
-        <button className="chip btn" onClick={() => go('scan')}>➕ Add cards</button>
+        {/* Same scan-a-binder flow the kid bar's Add Cards button
+            opens — go('scan') is the one shared entry point. */}
+        <button className="chip btn" onClick={() => go('scan')}><IconPlus size={18} /> Add cards</button>
       </div>
+      <button className="ideasBtn" onClick={() => go('ideas')}>
+        <IconBulb size={26} /><span>Trade Ideas</span>
+      </button>
+      {kidCount >= 2 && <div className="ideasHint">Swap ideas between binders!</div>}
+      {kidCount < 2 && <div className="ideasHint">Ideas need two kids — ask a grown-up to add one!</div>}
       {progress.length > 0 && (
         <div className="setChips">
           {progress.map((s) => (
@@ -247,35 +276,34 @@ export function BinderHome({ kid, go }) {
       )}
       {loading && <div className="screenNote">Opening binder…</div>}
       {!loading && !list.length && (
-        <div className="screenNote">No cards yet! Tap ➕ Add cards and scan the binder in. 📸</div>
+        <div className="screenNote">No cards yet! Tap Add Cards and scan the binder in.</div>
       )}
       {doublesOnly && shown.length > 0 && (
-        <div className="binderSubtotal">🔁 Doubles (trade pile): ${value.duplicatesValue.toFixed(2)}</div>
+        <div className="binderSubtotal"><IconSwap /> Doubles (trade pile): ${value.duplicatesValue.toFixed(2)}</div>
       )}
       {doublesOnly && !shown.length && list.length > 0 && (
         <div className="screenNote">No doubles yet — scan a second copy of a card and it lands here!</div>
       )}
-      {[...bySet.entries()].map(([key, group]) => (
-        <div key={key} className="binderGroup">
-          <h3>{group.name}</h3>
-          <div className="cardGrid">
-            {group.items.map((e) => (
-              <CardTile key={e.ref} entry={e} showPrice onTap={() => setSelRef(selRef === e.ref ? null : e.ref)} />
-            ))}
-          </div>
+      {!doublesOnly && list.length > 0 && <h3 className="binderAllHead">All my cards</h3>}
+      {shown.length > 0 && (
+        <div className="cardGrid">
+          {shown.map((e) => (
+            <CardTile key={e.ref} entry={e} showPrice onTap={() => setSelRef(selRef === e.ref ? null : e.ref)} />
+          ))}
         </div>
-      ))}
+      )}
       {sel && (
         <div className="qtySheet">
           <div className="qtyName">{sel.card.name} — #{sel.card.number}</div>
           <div className="qtyRow">
-            <button onClick={() => store.setBinderQty(kid.id, sel.ref, sel.qty - 1)}>➖</button>
+            <button onClick={() => store.setBinderQty(kid.id, sel.ref, sel.qty - 1)} aria-label="one less"><IconMinus /></button>
             <span>×{sel.qty}</span>
-            <button onClick={() => store.setBinderQty(kid.id, sel.ref, sel.qty + 1)}>➕</button>
-            <button className="removeBtn" onClick={() => { store.removeFromBinder(kid.id, sel.ref); setSelRef(null); }}>🗑 Remove</button>
+            <button onClick={() => store.setBinderQty(kid.id, sel.ref, sel.qty + 1)} aria-label="one more"><IconPlus /></button>
+            <button className="removeBtn" onClick={() => { store.removeFromBinder(kid.id, sel.ref); setSelRef(null); }}><IconTrash size={19} /> Remove</button>
           </div>
         </div>
       )}
+      <BadgesSection kid={kid} />
     </div>
   );
 }
@@ -334,12 +362,12 @@ export function SetPage({ kid, setKey, go }) {
       }
     }
   }, [pct, setData, kid, setKey]);
-  if (!kid) return <div className="screenNote">Pick a kid first! 👆</div>;
-  if (err) return <div className="screen"><button className="backBtn" onClick={() => go('binder')}>⬅ Binder</button><div className="screenNote">{err}</div></div>;
+  if (!kid) return <div className="screenNote">Pick a kid first!</div>;
+  if (err) return <div className="screen"><button className="backBtn" onClick={() => go('binder')}><IconBack size={19} /> Binder</button><div className="screenNote">{err}</div></div>;
   if (!setData) return <div className="screenNote">Loading the set…</div>;
   return (
     <div className="screen">
-      <button className="backBtn" onClick={() => go('binder')}>⬅ Binder</button>
+      <button className="backBtn" onClick={() => go('binder')}><IconBack size={19} /> Binder</button>
       <h2 className="screenTitle">{setData.set.name}</h2>
       <div className="progressHead">
         <span>{ownedCount} / {totalShown}</span>
@@ -348,7 +376,7 @@ export function SetPage({ kid, setKey, go }) {
       </div>
       {ownedCount > 0 && (
         <div className="setValueLine">
-          💰 Your cards in this set: ${setValue.total.toFixed(2)}
+          <IconTag size={19} /> Your cards in this set: ${setValue.total.toFixed(2)}
           {setValue.unpriced > 0 && (
             <span className="setValueNote"> ({setValue.unpriced} card{setValue.unpriced === 1 ? ' has' : 's have'} no price yet)</span>
           )}
@@ -395,7 +423,7 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
   const [choices, setChoices] = useState(null);
   const [last, setLast] = useState(null);
   const fileRef = useRef(null);
-  if (!kid) return <div className="screenNote">Add a kid in the grown-ups section below first! 👇</div>;
+  if (!kid) return <div className="screenNote">Add a kid in the grown-ups section first!</div>;
 
   async function onPhoto(e) {
     const file = e.target.files && e.target.files[0];
@@ -410,21 +438,21 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
       const res = await fetch('/api/identify', { method: 'POST', body: form });
       const json = await res.json();
       if (!json.ok) {
-        if (json.stumped) { setStatus('🤔 That one stumped me! Skip it for now.'); playClip('stumped', ''); }
-        else if (json.error === 'unreadable' || json.error === 'no-card') { setStatus('😕 I couldn\'t read that one — try again!'); playClip('unreadable', ''); }
-        else { setStatus('😕 Something went wrong — try again!'); playClip('wrong', ''); }
+        if (json.stumped) { setStatus('That one stumped me! Skip it for now.'); playClip('stumped', ''); }
+        else if (json.error === 'unreadable' || json.error === 'no-card') { setStatus('I couldn\'t read that one — try again!'); playClip('unreadable', ''); }
+        else { setStatus('Something went wrong — try again!'); playClip('wrong', ''); }
         return;
       }
       const shown = (json.candidates || []).filter((c) => c.displayable);
       if (!shown.length) {
-        if (json.stumped) { setStatus('🤔 That one stumped me! Skip it for now.'); playClip('stumped', ''); }
-        else { setStatus('😕 I couldn\'t read that one — try again!'); playClip('unreadable', ''); }
+        if (json.stumped) { setStatus('That one stumped me! Skip it for now.'); playClip('stumped', ''); }
+        else { setStatus('I couldn\'t read that one — try again!'); playClip('unreadable', ''); }
         return;
       }
       setChoices(shown.slice(0, 3));
       playClip('tap', '');
     } catch {
-      setStatus('😕 Something went wrong — try again!');
+      setStatus('Something went wrong — try again!');
       playClip('wrong', '');
     } finally { setBusy(false); }
   }
@@ -438,24 +466,24 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
       setStatus('');
       playClip('gotIt', '');
     } else {
-      setStatus('😕 That card isn\'t in our card book yet — skip it for now.');
+      setStatus('That card isn\'t in our card book yet — skip it for now.');
     }
   }
 
   return (
     <div className="screen">
-      <h2 className="screenTitle">➕ Add cards to {kid.emoji} {kid.name}&rsquo;s binder</h2>
+      <h2 className="screenTitle"><IconCardPlus /> Add cards to {kid.emoji} {kid.name}&rsquo;s binder</h2>
       <div className="scanCount">{count} card{count === 1 ? '' : 's'} added!</div>
       {last && (
         <div className="lastAdded">
           {last.thumb || last.image ? <img src={last.thumb || last.image} alt={last.name} /> : null}
-          <span>⭐ {last.name}</span>
+          <span><IconStar size={20} /> {last.name}</span>
         </div>
       )}
       <div className="status" role="status">{status}</div>
       {choices ? (
         <div className="choices">
-          <div className="q">Tap your card! 👇</div>
+          <div className="q">Tap your card!</div>
           <div className={`choiceGrid${choices.length === 1 ? ' one' : ''}`}>
             {choices.map((c, i) => (
               <button key={i} className="choiceBtn" onClick={() => pick(c)}>
@@ -464,18 +492,18 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
             ))}
           </div>
           <button className="noneBtn" onClick={() => { setChoices(null); setStatus('No problem — try the photo again!'); playClip('takeAgain', ''); }}>
-            🚫 NONE OF THESE — TAKE IT AGAIN
+            <IconX /> NONE OF THESE — TAKE IT AGAIN
           </button>
         </div>
       ) : (
         <>
           <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
           <button className="photoBtn big" disabled={busy} onClick={() => fileRef.current && fileRef.current.click()}>
-            {busy ? '👀 Looking…' : '📸 TAKE A PICTURE'}
+            {busy ? 'Looking…' : <><IconCamera size={30} /> TAKE A PICTURE</>}
           </button>
         </>
       )}
-      <button className="againBtn" onClick={() => go('binder')}>✅ DONE</button>
+      <button className="againBtn" onClick={() => go('binder')}><IconCheck /> DONE</button>
     </div>
   );
 }
@@ -505,7 +533,7 @@ export function BinderPicker({ kid, onPick, onClose, usedCounts = {} }) {
             );
           })}
         </div>
-        <button className="againBtn" onClick={onClose}>✅ DONE</button>
+        <button className="againBtn" onClick={onClose}><IconCheck /> DONE</button>
       </div>
     </div>
   );
@@ -530,20 +558,20 @@ export function IdeasScreen({ go, onStartTrade }) {
   );
   const giftsAB = useMemo(() => (A && B ? giftIdeas(listA, listB) : []), [listA, listB, A, B]);
   const giftsBA = useMemo(() => (A && B ? giftIdeas(listB, listA) : []), [listA, listB, A, B]);
-  if (kids.length < 2) return <div className="screenNote">Trade ideas need two kids — add another in the grown-ups section! 👇</div>;
-  if (!A || !B) return <div className="screenNote">Pick two kids! 👆</div>;
+  if (kids.length < 2) return <div className="screenNote">Trade ideas need two kids — ask a grown-up to add another in the grown-ups section!</div>;
+  if (!A || !B) return <div className="screenNote">Pick two kids!</div>;
   const pairCard = (give, get, kidGive, kidGet, onStart) => (
     <div className="ideaCard">
       <div className="ideaSide">
         <span className="ideaKid">{kidGive.emoji} {kidGive.name} gives</span>
         {give.card.thumb || give.card.image ? <img src={give.card.thumb || give.card.image} alt={give.card.name} /> : <div className="noArt">{give.card.name}</div>}
       </div>
-      <div className="ideaArrow">🔀</div>
+      <div className="ideaArrow"><IconSwap size={30} /></div>
       <div className="ideaSide">
         <span className="ideaKid">{kidGet.emoji} {kidGet.name} gives</span>
-        {get ? (get.card.thumb || get.card.image ? <img src={get.card.thumb || get.card.image} alt={get.card.name} /> : <div className="noArt">{get.card.name}</div>) : <div className="noArt">🎁 a surprise!</div>}
+        {get ? (get.card.thumb || get.card.image ? <img src={get.card.thumb || get.card.image} alt={get.card.name} /> : <div className="noArt">{get.card.name}</div>) : <div className="noArt"><IconGift size={30} /><br />a surprise!</div>}
       </div>
-      <button className="goBtnSmall" onClick={onStart}>▶️ Start this trade</button>
+      <button className="goBtnSmall" onClick={onStart}><IconPlay size={18} /> Start this trade</button>
       <details className="ideaDetail">
         <summary>Grown-ups: values</summary>
         {give.card.name} {typeof give.card.price === 'number' ? `$${give.card.price.toFixed(2)}` : 'no price'}
@@ -553,21 +581,22 @@ export function IdeasScreen({ go, onStartTrade }) {
   );
   return (
     <div className="screen">
-      <h2 className="screenTitle">💡 Trade ideas</h2>
+      <button className="backBtn" onClick={() => go('binder')}><IconBack size={19} /> Binder</button>
+      <h2 className="screenTitle"><IconBulb /> Trade ideas</h2>
       <div className="ideaPickers">
         <KidSwitcher kids={kids} value={A.id} onChange={(id) => { setAId(id); if (id === B.id) setBId(A.id); }} />
-        <span className="ideaVs">🔀</span>
+        <span className="ideaVs"><IconSwap size={28} /></span>
         <KidSwitcher kids={kids.filter((k) => k.id !== A.id)} value={B.id} onChange={setBId} />
       </div>
-      {loading && <div className="screenNote">Thinking… 🤔</div>}
-      <h3 className="ideaHead">⭐ Perfect swaps</h3>
+      {loading && <div className="screenNote">Thinking…</div>}
+      <h3 className="ideaHead"><IconStar /> Perfect swaps</h3>
       {!swaps.length && <div className="screenNote">No perfect swaps yet — scan more cards into both binders!</div>}
       {swaps.map((s, i) => (
         <div key={i}>{pairCard(s.giveA, s.giveB, A, B, () => onStartTrade({
           aKid: A.id, bKid: B.id, aCards: [s.giveA.card], bCards: [s.giveB.card],
         }))}</div>
       ))}
-      <h3 className="ideaHead">🎁 Almost-finishing gifts</h3>
+      <h3 className="ideaHead"><IconGift /> Almost-finishing gifts</h3>
       {!giftsAB.length && !giftsBA.length && <div className="screenNote">No finishing gifts right now.</div>}
       {giftsAB.map((g, i) => (
         <div key={'ab' + i}>{pairCard(g.give, g.returnCard, A, B, () => onStartTrade({
@@ -583,41 +612,66 @@ export function IdeasScreen({ go, onStartTrade }) {
   );
 }
 
-// ---------- Kid profile + badges ----------
+// ---------- Badges (was the "Me" tab; now a section of the binder) ----------
 
-export function ProfileScreen({ kid, go }) {
+// The Fair Trader badge content that used to fill the ⭐ Me screen,
+// as a section rendered at the bottom of the binder for the active
+// kid. Star rows are drawn with the custom star icon — the tier's
+// star COUNT comes from lib/logic.js FAIR_TIERS order (tier index),
+// not from its display string.
+const TIER_STAR_COUNT = { 'First Fair Trade': 1, 'Fair Trader': 3, 'Super Fair Trader': 4, 'Fair Trade Legend': 5 };
+
+export function BadgesSection({ kid }) {
   const state = useStoreState();
   const { list } = useKidBinder(kid ? kid.id : null);
-  if (!kid) return <div className="screenNote">Add a kid in the grown-ups section below first! 👇</div>;
+  if (!kid) return null;
   const trades = kidFairTrades(state.trades, kid.id);
   const badge = fairTraderBadge(trades.length);
   const progress = setProgress(list);
   const sb = setBadges(progress);
+  const starCount = badge.tier ? (TIER_STAR_COUNT[badge.tier.name] || 1) : 0;
+  return (
+    <div className="badgesWrap">
+      <h3 className="ideaHead"><IconStar /> My badges</h3>
+      <div className="badgeCard">
+        <div className="badgeTitle">Fair Trader</div>
+        <div className="badgeStars">
+          {starCount > 0
+            ? Array.from({ length: starCount }, (_, i) => <IconStar key={i} size={30} />)
+            : <span className="badgeStarEmpty"><IconStar size={30} /></span>}
+        </div>
+        <div className="badgeBig">{trades.length}</div>
+        <div className="badgeName">{badge.tier ? badge.tier.name : 'Make a fair trade to earn your first star!'}</div>
+        {badge.next && badge.tier && <div className="badgeNext">{badge.next.min - trades.length} more to “{badge.next.name}”</div>}
+      </div>
+      <h3 className="ideaHead"><IconCompass /> Set Explorer</h3>
+      {!sb.length && <div className="screenNote">Finish half of a set to earn a badge!</div>}
+      <div className="setBadgeGrid">
+        {sb.map((b) => (
+          <div key={b.setKey} className="setBadge">
+            <span className="setBadgeIcon">{b.crown ? <IconCrown size={30} /> : <IconCompass size={30} />}</span>
+            <span className="setBadgeName">{b.setName}</span>
+            <span className="setBadgePct">{Math.round(b.pct * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Kept for compatibility: the profile view is now just the kid's
+// head + the badges section (the binder renders the same section
+// inline; nothing links here from the kid bar anymore).
+export function ProfileScreen({ kid, go }) {
+  if (!kid) return <div className="screenNote">Add a kid in the grown-ups section first!</div>;
   return (
     <div className="screen">
       <div className="profileHead" style={{ borderColor: kid.color }}>
         <span className="profileEmoji">{kid.emoji}</span>
         <span className="profileName">{kid.name}</span>
       </div>
-      <div className="badgeCard">
-        <div className="badgeTitle">Fair Trader</div>
-        <div className="badgeStars">{badge.tier ? badge.tier.stars : '☆'}</div>
-        <div className="badgeBig">{trades.length}</div>
-        <div className="badgeName">{badge.tier ? badge.tier.name : 'Make a fair trade to earn your first ⭐!'}</div>
-        {badge.next && badge.tier && <div className="badgeNext">{badge.next.min - trades.length} more to “{badge.next.name}”</div>}
-      </div>
-      <h3 className="ideaHead">🧭 Set Explorer</h3>
-      {!sb.length && <div className="screenNote">Finish half of a set to earn a badge!</div>}
-      <div className="setBadgeGrid">
-        {sb.map((b) => (
-          <div key={b.setKey} className="setBadge">
-            <span className="setBadgeIcon">{b.label}</span>
-            <span className="setBadgeName">{b.setName}</span>
-            <span className="setBadgePct">{Math.round(b.pct * 100)}%</span>
-          </div>
-        ))}
-      </div>
-      <button className="againBtn" onClick={() => go('binder')}>📚 Open my binder</button>
+      <BadgesSection kid={kid} />
+      <button className="againBtn" onClick={() => go('binder')}><IconBinder /> Open my binder</button>
     </div>
   );
 }
@@ -692,7 +746,7 @@ export function ParentLayer({ onOpenBinder } = {}) {
     : '';
   return (
     <div className="parentLayer">
-      <h4>👨‍👩‍👧 Kids &amp; binders</h4>
+      <h4><IconBinder size={19} /> Kids &amp; binders</h4>
       {state.kids.map((k) => (
         <div key={k.id} className="row">
           <button className="go" title="Change picture" onClick={() => {
@@ -702,7 +756,7 @@ export function ParentLayer({ onOpenBinder } = {}) {
           <input defaultValue={k.name} key={k.id + k.name} style={{ flex: '1 1 120px' }}
             onBlur={(e) => store.renameKid(k.id, e.target.value)} />
           <span>{kindWord(state.binders[k.id] ? Object.keys(state.binders[k.id]).length : 0)}</span>
-          <button className="go" onClick={() => { setSelKidId(k.id); if (onOpenBinder) onOpenBinder(k.id); }}>📚 Open binder</button>
+          <button className="go" onClick={() => { setSelKidId(k.id); if (onOpenBinder) onOpenBinder(k.id); }}><IconBinder size={17} /> Open binder</button>
           <button className="go danger" onClick={() => {
             if (window.confirm(`Delete ${k.name} and their binder? This cannot be undone.`)) store.deleteKid(k.id);
           }}>Delete</button>
@@ -717,9 +771,9 @@ export function ParentLayer({ onOpenBinder } = {}) {
         <button className="go" disabled={!newName.trim()} onClick={() => {
           const k = store.addKid(newName.trim(), newEmoji);
           setNewName(''); setSelKidId(k.id);
-        }}>➕ Add kid</button>
+        }}><IconPlus size={17} /> Add kid</button>
       </div>
-      <h4>⚖️ Fairness cushion</h4>
+      <h4><IconScales size={19} /> Fairness cushion</h4>
       <p>
         How close the two sides of a trade must be to count as FAIR.
         “Percentage (standard)” compares the gap to the bigger side&rsquo;s value (fair within 15%);
@@ -739,15 +793,15 @@ export function ParentLayer({ onOpenBinder } = {}) {
       </div>
       {selKid && (
         <>
-          <h4>👀 Parent view — values &amp; gift ideas for {selKid.name.split(' ')[0]}</h4>
-          <p>Everything below follows the kid picked with 📚 Open binder above.</p>
-          <h4>📚 {selKid.emoji} {selKid.name}&rsquo;s binder value</h4>
+          <h4>Parent view — values &amp; gift ideas for {selKid.name.split(' ')[0]}</h4>
+          <p>Everything below follows the kid picked with Open binder above.</p>
+          <h4><IconBinder size={19} /> {selKid.emoji} {selKid.name}&rsquo;s binder value</h4>
           <p>
             {value.count} card{value.count === 1 ? '' : 's'} ({kindWord(value.distinct)}) worth about <b>${value.total.toFixed(2)}</b>.
             Doubles (trade pile) worth about <b>${value.duplicatesValue.toFixed(2)}</b>.
             Japanese cards are counted at their converted USD value, same as trades.
           </p>
-          <h4>🎁 Gift Radar — {selKid.name.split(' ')[0]}&rsquo;s closest sets</h4>
+          <h4><IconGift size={19} /> Gift Radar — {selKid.name.split(' ')[0]}&rsquo;s closest sets</h4>
           <p>
             Cards {selKid.name.split(' ')[0]} is <b>MISSING</b> from the sets he&rsquo;s closest to
             finishing — gift ideas for family. These aren&rsquo;t his cards; they&rsquo;re what&rsquo;s
@@ -782,7 +836,7 @@ export function ParentLayer({ onOpenBinder } = {}) {
               <CopyLink value={shareGift} />
             </>
           )}
-          <h4>🔗 Move or share this binder</h4>
+          <h4><IconLink size={19} /> Move or share this binder</h4>
           <p>Anyone opening this link on another device can import a copy of {selKid.name}&rsquo;s binder (it asks first, and merges by adding quantities).</p>
           <CopyLink value={shareBinder} />
         </>
