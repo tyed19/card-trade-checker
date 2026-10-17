@@ -12,7 +12,7 @@ import {
   IconBack, IconRefresh, IconDice, IconStar,
 } from './icons';
 import * as store from '../lib/store';
-import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, FAIR_BAND } from '../lib/logic';
+import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, fmtPriceLine, FAIR_BAND } from '../lib/logic';
 import { decodePayload } from '../lib/links';
 
 const DEMO = {
@@ -226,6 +226,10 @@ export default function Home() {
   // price-compare table and manual search out, as the owner asked.
   const [grownFrom, setGrownFrom] = useState(null);
   const [grownHint, setGrownHint] = useState(false);
+  // Set by the kid-switcher's "Add a kid" tile: once the grown-ups
+  // screen opens, scroll straight to Kids & binders (see the effect
+  // below the grownOpen derivation).
+  const [grownJumpKids, setGrownJumpKids] = useState(false);
   const grownPress = useRef({ timer: null, opened: false });
   const [manual, setManual] = useState({ name: '', number: '', side: 'mine', results: [], busy: false });
   const fileRefs = { mine: useRef(null), theirs: useRef(null) };
@@ -303,6 +307,17 @@ export default function Home() {
   function grownPressCancel() {
     clearTimeout(grownPress.current.timer);
     grownPress.current.opened = false;
+  }
+
+  // The kid-switcher's "＋ Add a kid" tile: a second, obvious door
+  // for this one job. It opens the grown-ups screen directly at
+  // Kids & binders — NO long-press. Adding a kid creates an empty,
+  // deletable profile, which is harmless on a family device; kid
+  // deletion and renaming stay grown-ups-only, as before.
+  function openGrownAtKids() {
+    setGrownFrom(view);
+    setGrownJumpKids(true);
+    try { window.scrollTo({ top: 0 }); } catch { /* ignore */ }
   }
 
   function startTradeFromIdeas({ aKid, bKid, aCards, bCards }) {
@@ -605,8 +620,24 @@ export default function Home() {
   const grownOpen = grownFrom !== null;
   const grownTradeCtx = grownFrom === 'trade';
 
+  // "Add a kid" shortcut landing: after the grown-ups screen mounts,
+  // scroll Kids & binders into view so the add form is right there.
+  useEffect(() => {
+    if (!grownOpen || !grownJumpKids) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById('kids-binders');
+      if (el) el.scrollIntoView({ block: 'start' });
+      setGrownJumpKids(false);
+    }, 80);
+    return () => clearTimeout(t);
+  }, [grownOpen, grownJumpKids]);
+
   const Panel = ({ side, label, cls }) => {
     const s = sides[side];
+    // The panel's Total line: the SAME reduction checkTrade runs on
+    // this side's cards (sum of (c.price || 0)) — one summation path,
+    // so the number a parent sees here always matches the verdict.
+    const sideTotal = s.cards.reduce((sum, c) => sum + (c.price || 0), 0);
     const sideKid = binderState.kids.find((k) => k.id === sideKids[side]) || null;
     const usedCounts = {};
     for (const c of s.cards) if (c.ref) usedCounts[c.ref] = (usedCounts[c.ref] || 0) + 1;
@@ -659,16 +690,27 @@ export default function Home() {
 
         {s.cards.length > 0 && (
           <div className="thumbs">
-            {s.cards.map((c, i) => (
-              <div className="thumb" key={c.id + '-' + i}>
-                {c.image && <img src={c.image} alt={c.name} />}
-                <button aria-label="remove" onClick={() => removeCard(side, i)}>×</button>
-                {binderState.kids.length > 0 && (
-                  <button className="addBtn" aria-label="add to binder" title="Add to a binder" onClick={() => setBinderPick(c)}><IconPlus size={16} /></button>
-                )}
-              </div>
-            ))}
+            {s.cards.map((c, i) => {
+              const priceLine = fmtPriceLine(c);
+              return (
+                <div className="thumbCol" key={c.id + '-' + i}>
+                  <div className="thumb">
+                    {c.image && <img src={c.image} alt={c.name} />}
+                    <button aria-label="remove" onClick={() => removeCard(side, i)}>×</button>
+                    {binderState.kids.length > 0 && (
+                      <button className="addBtn" aria-label="add to binder" title="Add to a binder" onClick={() => setBinderPick(c)}><IconPlus size={16} /></button>
+                    )}
+                  </div>
+                  {priceLine
+                    ? <span className="thumbPrice">{priceLine}</span>
+                    : <span className="thumbPrice none">no price</span>}
+                </div>
+              );
+            })}
           </div>
+        )}
+        {s.cards.length > 0 && (
+          <div className="sideTotal">Total: ${sideTotal.toFixed(2)}</div>
         )}
         {pickerSide === side && sideKid && (
           <BinderPicker
@@ -692,7 +734,7 @@ export default function Home() {
         <span><IconCamera size={19} /> Take a picture</span><span><IconCards size={19} /> Tap your card</span><span><IconScales size={19} /> Check!</span>
       </div>
 
-      {!grownOpen && <KidBar state={binderState} view={view} go={go} onNav={navGo} />}
+      {!grownOpen && <KidBar state={binderState} view={view} go={go} onNav={navGo} onAddKid={openGrownAtKids} />}
       {!grownOpen && (
         <div className="grownEntryRow">
           <button
@@ -703,7 +745,8 @@ export default function Home() {
             onPointerCancel={grownPressCancel}
             onContextMenu={(e) => e.preventDefault()}
           >
-            <IconLock size={16} /> Grown-ups
+            <span className="grownMain"><IconLock size={16} /> Grown-ups</span>
+            <span className="grownSub">Hold to open</span>
           </button>
           {grownHint && <div className="grownHint">Hold to open — grown-ups only</div>}
         </div>

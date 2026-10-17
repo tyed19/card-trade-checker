@@ -73,6 +73,13 @@ input[type='file'] { display: none; }
 .noneBtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #96222d; }
 
 .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; justify-content: center; }
+/* Trade panels show each picked card's worth again (owner's call,
+   same as binder/set prices): gold price line under each thumb,
+   via the shared fmtPriceLine formatter. */
+.thumbCol { display: flex; flex-direction: column; align-items: center; width: 74px; }
+.thumbPrice { display: block; text-align: center; font-weight: 900; font-size: 13px; color: #ffd94d; margin-top: 4px; }
+.thumbPrice.none { color: #9fb3d9; font-weight: bold; font-size: 12px; }
+.sideTotal { text-align: center; font-weight: 900; font-size: 19px; color: #ffd94d; margin-top: 10px; }
 .thumb { position: relative; width: 74px; }
 .thumb img { width: 74px; height: 103px; object-fit: cover; border-radius: 8px; border: 3px solid #fff; }
 .thumb button {
@@ -119,12 +126,18 @@ input[type='file'] { display: none; }
    full screen of its own (the kid scroll no longer contains it). */
 .grownEntryRow { max-width: 760px; margin: 2px auto 10px; padding: 0 12px; text-align: center; }
 .grownEntryBtn {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; flex-direction: column; align-items: center; gap: 1px;
   font-family: inherit; font-weight: bold; font-size: 14.5px; cursor: pointer;
   background: transparent; color: #8ea3c8; border: 2px solid #2c3d5f;
-  border-radius: 999px; padding: 7px 15px;
+  border-radius: 999px; padding: 7px 18px;
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
+.grownMain { display: inline-flex; align-items: center; gap: 6px; }
+/* Persistent "Hold to open" sublabel: the long-press gesture is
+   discoverable without a failed tap first (the transient hint
+   alone left families with an existing kid no instruction). */
+.grownSub { font-size: 11px; font-weight: bold; letter-spacing: .05em; text-transform: uppercase; color: #7286a8; }
+#kids-binders { scroll-margin-top: 14px; }
 .grownEntryBtn:active { background: #22314f; color: #cbd5e1; }
 .grownHint { margin-top: 6px; font-weight: bold; font-size: 14.5px; color: #f5b301; }
 .grownScreen { max-width: 760px; margin: 0 auto 40px; padding: 0 12px; }
@@ -156,6 +169,11 @@ input[type='file'] { display: none; }
 .kidAvatar .kidEmoji { font-size: 30px; line-height: 1.1; }
 .kidAvatar .kidName { font-size: 13px; font-weight: bold; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kidAvatar.sel { background: #2a75bb; box-shadow: 0 0 0 3px #ffcb05; }
+/* "＋ Add a kid" tile at the end of the switcher row: dashed and
+   quiet, so it reads as an action, not another kid. */
+.kidAvatar.addKid { border-style: dashed; background: transparent; color: #9fb3d9; }
+.kidAvatar.addKid .kidName { color: #9fb3d9; }
+.kidAvatar .addKidPlus { display: flex; align-items: center; justify-content: center; height: 33px; }
 .kidSwitch.big .kidEmoji { font-size: 44px; }
 .kidNav { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
 .kidNav button {

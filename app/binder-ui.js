@@ -138,7 +138,7 @@ export async function resolveCandidateRef(cand) {
 
 // ---------- shared bits ----------
 
-export function KidSwitcher({ kids, value, onChange, big = false }) {
+export function KidSwitcher({ kids, value, onChange, big = false, trailing = null }) {
   if (!kids.length) return null;
   return (
     <div className={`kidSwitch${big ? ' big' : ''}`}>
@@ -154,6 +154,7 @@ export function KidSwitcher({ kids, value, onChange, big = false }) {
           <span className="kidName">{k.name}</span>
         </button>
       ))}
+      {trailing}
     </div>
   );
 }
@@ -163,7 +164,7 @@ export function KidSwitcher({ kids, value, onChange, big = false }) {
 // live inside the binder (a Trade Ideas button and a badges section
 // at the bottom of BinderHome). Nav taps speak their label via the
 // onNav callback page.js passes in (falls back to plain navigation).
-export function KidBar({ state, view, go, onNav }) {
+export function KidBar({ state, view, go, onNav, onAddKid }) {
   const active = state.kids.find((k) => k.id === state.activeKidId) || state.kids[0];
   if (!state.kids.length) return null;
   const nav = onNav || ((v) => go(v));
@@ -174,6 +175,12 @@ export function KidBar({ state, view, go, onNav }) {
         kids={state.kids}
         value={active ? active.id : null}
         onChange={(id) => { store.setActiveKid(id); if (view === 'set') go('binder'); }}
+        trailing={onAddKid ? (
+          <button className="kidAvatar addKid" onClick={onAddKid} title="Add a kid">
+            <span className="kidEmoji addKidPlus"><IconPlus size={26} /></span>
+            <span className="kidName">Add a kid</span>
+          </button>
+        ) : null}
       />
       <div className="kidNav">
         <button className={view === 'trade' ? 'on' : ''} onClick={() => nav('trade', 'Trade!')}>
@@ -746,7 +753,7 @@ export function ParentLayer({ onOpenBinder } = {}) {
     : '';
   return (
     <div className="parentLayer">
-      <h4><IconBinder size={19} /> Kids &amp; binders</h4>
+      <h4 id="kids-binders"><IconBinder size={19} /> Kids &amp; binders</h4>
       {state.kids.map((k) => (
         <div key={k.id} className="row">
           <button className="go" title="Change picture" onClick={() => {
