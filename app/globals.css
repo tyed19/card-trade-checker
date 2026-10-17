@@ -177,6 +177,13 @@ input[type='file'] { display: none; }
   position: absolute; top: 6px; right: 6px; background: #ffcb05; color: #14213d;
   font-weight: 900; border-radius: 999px; padding: 2px 8px; font-size: 15px; border: 2px solid #c79a00;
 }
+.cardTile .tilePrice { display: block; text-align: center; font-weight: 900; font-size: 13px; color: #ffd94d; margin-top: 4px; }
+.cardTile .tilePrice.none { color: #9fb3d9; font-weight: bold; font-size: 12px; }
+.binderTotal { background: #1d3557; border: 3px solid #2fbf71; border-radius: 16px; padding: 10px 12px; text-align: center; margin-bottom: 12px; }
+.binderTotalMain { font-size: clamp(20px, 5.6vw, 26px); font-weight: 900; }
+.binderTotalSub { font-size: 16px; font-weight: bold; margin-top: 2px; }
+.binderTotalNote { font-size: 14px; opacity: .85; margin-top: 2px; }
+.binderSubtotal { text-align: center; font-weight: 900; font-size: 17px; margin: 2px 0 10px; }
 .noArt { background: #1f3a68; border: 3px dashed #3b4d74; border-radius: 10px; padding: 18px 6px; text-align: center; font-weight: bold; color: #fff; }
 .qtySheet { position: sticky; bottom: 10px; background: #0f1a30; border: 3px solid #ffcb05; border-radius: 16px; padding: 12px; margin-top: 14px; text-align: center; }
 .qtyName { font-weight: 900; font-size: 18px; margin-bottom: 8px; }

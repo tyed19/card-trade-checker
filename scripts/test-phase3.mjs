@@ -41,6 +41,30 @@ ok('binderValue weights qty, duplicatesValue counts spares only', () => {
   assert.equal(v.total, 25); assert.equal(v.duplicatesValue, 10);
   assert.equal(v.count, 3); assert.equal(v.distinct, 2);
 });
+ok('binder total == parent-layer value on a mixed fixture (qty, EUR, unpriced)', () => {
+  // The kid binder banner and the grown-ups ParentLayer both render
+  // binderValue(list) — this fixture pins the shared math: qty-weighted
+  // total, spare-copies doubles split, EUR card at its converted USD
+  // price, and the unpriced count the banner's qualifier prints.
+  const list = B([
+    ['e1', 3, mkCard('e1', 0.68)],                                        // 3 x $0.68 = $2.04, spares $1.36
+    ['j1', 2, mkCard('j1', 2.50, { lang: 'ja', currency: 'EUR', setId: 'sJ', setName: 'Set J' })], // EUR card, price already USD-converted: 2 x $2.50 = $5.00, spares $2.50
+    ['e2', 2, mkCard('e2', null)],                                         // unpriced: $0, 2 copies / 1 kind
+  ]);
+  const v = binderValue(list); // the one helper both layers share
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  assert.ok(near(v.total, 7.04), `total ${v.total}`);
+  assert.ok(near(v.duplicatesValue, 3.86), `duplicatesValue ${v.duplicatesValue}`);
+  assert.equal(v.count, 7);
+  assert.equal(v.distinct, 3);
+  assert.equal(v.unpriced, 2);       // copies with no price
+  assert.equal(v.unpricedKinds, 1);
+  // every fixture card is a double here; the doubles view/filter agrees
+  assert.deepEqual(duplicates(list).map((e) => e.ref), ['e1', 'e2', 'j1']); // binderList set/number sort order
+  // a single-copy unpriced card: qualifier counts 1 copy
+  const one = binderValue(B([['e9', 1, mkCard('e9', null)]]));
+  assert.equal(one.total, 0); assert.equal(one.unpriced, 1); assert.equal(one.unpricedKinds, 1);
+});
 ok('setProgress groups, totals, closest-first sort', () => {
   const list = B([
     ['e1', 1, mkCard('e1', 1, { setId: 'sA', setTotal: 10, number: '1' })],

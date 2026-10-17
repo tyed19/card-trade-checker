@@ -3,9 +3,10 @@
 // Phase 3 kid-facing UI: binders, set pages, scan-a-binder, trade
 // ideas, badges, and the grown-ups parent layer. All state comes from
 // lib/store.js (on-device); all card facts resolve through /api/cards
-// and /api/set against the server catalog (lib/catalog.js). Prices are
-// shown ONLY in the ParentLayer (grown-ups) — kid screens are pictures,
-// counts, and progress, per the standing design rules.
+// and /api/set against the server catalog (lib/catalog.js). Prices
+// appear in the ParentLayer (grown-ups) and — at the owner's explicit
+// request — on the binder screens (per-card price + binder total).
+// The trade panels and verdict stay price-free.
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import * as store from '../lib/store';
@@ -172,8 +173,10 @@ export function KidBar({ state, view, go }) {
   );
 }
 
-export function CardTile({ entry, onTap, badge }) {
+export function CardTile({ entry, onTap, badge, showPrice = false }) {
   const c = entry.card || entry;
+  const qty = entry.qty || 1;
+  const priced = typeof c.price === 'number';
   return (
     <button className="cardTile" onClick={onTap}>
       {c.thumb || c.image
@@ -181,6 +184,11 @@ export function CardTile({ entry, onTap, badge }) {
         : <div className="noArt">{c.name}</div>}
       {entry.qty > 1 && <span className="qtyBadge">×{entry.qty}</span>}
       {badge}
+      {showPrice && (priced
+        ? <span className="tilePrice">{qty > 1
+          ? `$${c.price.toFixed(2)} ×${qty} · $${(c.price * qty).toFixed(2)}`
+          : `$${c.price.toFixed(2)}`}</span>
+        : <span className="tilePrice none">no price</span>)}
     </button>
   );
 }
@@ -192,6 +200,10 @@ export function BinderHome({ kid, go }) {
   const [doublesOnly, setDoublesOnly] = useState(false);
   const [selRef, setSelRef] = useState(null);
   const progress = useMemo(() => setProgress(list), [list]);
+  // SAME helper the grown-ups ParentLayer uses for binder value —
+  // one summation, so the kid binder total and the parent number can
+  // never drift apart.
+  const value = useMemo(() => binderValue(list), [list]);
   if (!kid) return <div className="screenNote">Add a kid in the grown-ups section below first! 👇</div>;
   const shown = doublesOnly ? duplicates(list) : list;
   const bySet = new Map();
@@ -204,6 +216,19 @@ export function BinderHome({ kid, go }) {
   return (
     <div className="screen">
       <h2 className="screenTitle">{kid.emoji} {kid.name}&rsquo;s Binder</h2>
+      {list.length > 0 && (
+        <div className="binderTotal">
+          <div className="binderTotalMain">💰 Binder total: ${value.total.toFixed(2)}</div>
+          {duplicates(list).length > 0 && (
+            <div className="binderTotalSub">🔁 Doubles (trade pile): ${value.duplicatesValue.toFixed(2)}</div>
+          )}
+          {value.unpriced > 0 && (
+            <div className="binderTotalNote">
+              ({value.unpriced} card{value.unpriced === 1 ? ' has' : 's have'} no price yet)
+            </div>
+          )}
+        </div>
+      )}
       <div className="chipRow">
         <span className="chip">🃏 {list.reduce((a, e) => a + e.qty, 0)} cards</span>
         <button className={`chip btn${doublesOnly ? ' on' : ''}`} onClick={() => setDoublesOnly(!doublesOnly)}>
@@ -226,12 +251,18 @@ export function BinderHome({ kid, go }) {
       {!loading && !list.length && (
         <div className="screenNote">No cards yet! Tap ➕ Add cards and scan the binder in. 📸</div>
       )}
+      {doublesOnly && shown.length > 0 && (
+        <div className="binderSubtotal">🔁 Doubles (trade pile): ${value.duplicatesValue.toFixed(2)}</div>
+      )}
+      {doublesOnly && !shown.length && list.length > 0 && (
+        <div className="screenNote">No doubles yet — scan a second copy of a card and it lands here!</div>
+      )}
       {[...bySet.entries()].map(([key, group]) => (
         <div key={key} className="binderGroup">
           <h3>{group.name}</h3>
           <div className="cardGrid">
             {group.items.map((e) => (
-              <CardTile key={e.ref} entry={e} onTap={() => setSelRef(selRef === e.ref ? null : e.ref)} />
+              <CardTile key={e.ref} entry={e} showPrice onTap={() => setSelRef(selRef === e.ref ? null : e.ref)} />
             ))}
           </div>
         </div>
