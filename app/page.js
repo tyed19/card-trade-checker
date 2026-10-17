@@ -546,6 +546,19 @@ export default function Home() {
 
   const bothReady = sides.mine.cards.length > 0 && sides.theirs.cards.length > 0;
 
+  // The grown-ups box is context-aware: its trade-only blocks (the
+  // "What the app found" price-compare table and the manual search)
+  // render ONLY in the trade view. In binder/set/scan views they
+  // would report on a trade the user isn't looking at — and manual
+  // search even ADDS cards to a trade side. Ideas/profile are
+  // non-trade views too, so they hide as well. ParentLayer (Kids &
+  // binders, Parent view, ⚖️ Fairness cushion) shows in every view,
+  // as does the price-provenance note below: binder screens show
+  // prices from the same catalog, so it explains those numbers too,
+  // and its cushion sentence points at the setting right under it,
+  // which stays visible in both contexts.
+  const inTradeView = view === 'trade';
+
   const Panel = ({ side, label, cls }) => {
     const s = sides[side];
     const sideKid = binderState.kids.find((k) => k.id === sideKids[side]) || null;
@@ -745,6 +758,8 @@ export default function Home() {
         </button>
         {grownOpen && (
           <div className="grownBox">
+            {inTradeView && (
+            <>
             <strong>What the app found</strong>
             <table>
               <thead><tr><th>Side</th><th>Card</th><th>No.</th><th>Price</th><th></th></tr></thead>
@@ -810,6 +825,8 @@ export default function Home() {
                 )}
               </div>
             ))}
+            </>
+            )}
             <p style={{ opacity: 0.75 }}>
               Prices come from the app's own card catalog (TCGplayer market for English cards, Cardmarket trend
               converted from EUR for Japanese cards, via TCGdex data), refreshed nightly.
@@ -825,7 +842,7 @@ export default function Home() {
                 You can switch to a fixed-dollar window under ⚖️ Fairness cushion below.</>
               )}
             </p>
-            {verdict && verdict.ruleNote && <p style={{ opacity: 0.9 }}>⚖️ {verdict.ruleNote}</p>}
+            {inTradeView && verdict && verdict.ruleNote && <p style={{ opacity: 0.9 }}>⚖️ {verdict.ruleNote}</p>}
             <ParentLayer onOpenBinder={(kidId) => {
               store.setActiveKid(kidId);
               setGrownOpen(false);
