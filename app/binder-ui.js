@@ -12,7 +12,11 @@ import * as store from '../lib/store';
 import {
   binderList, duplicates, setProgress, binderValue, perfectSwaps, giftIdeas,
   spareHolders, giftRadar, fairTraderBadge, kidFairTrades, setBadges, ownedRefSet,
+  radarSets, normalizeFairness, fmtCushion, CUSHION_CHOICES,
 } from '../lib/logic';
+
+// "1 kind" / "3 kinds" — the count word agrees with the number.
+const kindWord = (n) => `${n} kind${n === 1 ? '' : 's'}`;
 import { giftPath, binderImportPath } from '../lib/links';
 
 // ---------- store + resolution hooks ----------
@@ -467,7 +471,11 @@ export function IdeasScreen({ go, onStartTrade }) {
   const B = kids.find((k) => k.id === bId && k.id !== (A && A.id)) || kids.find((k) => k.id !== (A && A.id));
   const listA = (A && lists[A.id]) || [];
   const listB = (B && lists[B.id]) || [];
-  const swaps = useMemo(() => (A && B ? perfectSwaps(listA, listB) : []), [listA, listB, A, B]);
+  const swaps = useMemo(
+    () => (A && B ? perfectSwaps(listA, listB, 10, { fairness: state.fairness }) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [listA, listB, A, B, state.fairness]
+  );
   const giftsAB = useMemo(() => (A && B ? giftIdeas(listA, listB) : []), [listA, listB, A, B]);
   const giftsBA = useMemo(() => (A && B ? giftIdeas(listB, listA) : []), [listA, listB, A, B]);
   if (kids.length < 2) return <div className="screenNote">Trade ideas need two kids — add another in the grown-ups section! 👇</div>;
@@ -578,7 +586,7 @@ function CopyLink({ value }) {
   );
 }
 
-export function ParentLayer() {
+export function ParentLayer({ onOpenBinder } = {}) {
   const state = useStoreState();
   const [selKidId, setSelKidId] = useState(null);
   const [newName, setNewName] = useState('');
@@ -587,7 +595,10 @@ export function ParentLayer() {
   const { list } = useKidBinder(selKid ? selKid.id : null);
   const value = useMemo(() => binderValue(list), [list]);
   const progress = useMemo(() => setProgress(list), [list]);
-  const topSets = progress.slice(0, 3);
+  // Gift Radar headlines only sets with meaningful progress
+  // (>= 10% owned or >= 15 cards) — see lib/logic.js radarSets.
+  const topSets = useMemo(() => radarSets(progress), [progress]);
+  const fairness = normalizeFairness(state.fairness);
   const [budget, setBudget] = useState('any');
   const [setListings, setSetListings] = useState({});
   const topKey = topSets.map((s) => s.key).join('|');
@@ -638,8 +649,8 @@ export function ParentLayer() {
           }}>{k.emoji}</button>
           <input defaultValue={k.name} key={k.id + k.name} style={{ flex: '1 1 120px' }}
             onBlur={(e) => store.renameKid(k.id, e.target.value)} />
-          <span>{(state.binders[k.id] ? Object.keys(state.binders[k.id]).length : 0)} kinds</span>
-          <button className="go" onClick={() => setSelKidId(k.id)}>View</button>
+          <span>{kindWord(state.binders[k.id] ? Object.keys(state.binders[k.id]).length : 0)}</span>
+          <button className="go" onClick={() => { setSelKidId(k.id); if (onOpenBinder) onOpenBinder(k.id); }}>📚 Open binder</button>
           <button className="go danger" onClick={() => {
             if (window.confirm(`Delete ${k.name} and their binder? This cannot be undone.`)) store.deleteKid(k.id);
           }}>Delete</button>
@@ -656,16 +667,44 @@ export function ParentLayer() {
           setNewName(''); setSelKidId(k.id);
         }}>➕ Add kid</button>
       </div>
+      <h4>⚖️ Fairness cushion</h4>
+      <p>
+        How close the two sides of a trade must be to count as FAIR.
+        “Percentage (standard)” compares the gap to the bigger side&rsquo;s value (fair within 15%);
+        a fixed cushion uses plain dollars instead — handy for cheap cards, where 15% is pennies.
+        ALMOST FAIR allows 3x the window either way, and any window widens x1.5 when a
+        Japanese (EUR-priced) card is in the trade.
+      </p>
+      <div className="row">
+        <button className="go"
+          style={fairness.mode === 'pct' ? { outline: '3px solid #f5b301' } : undefined}
+          onClick={() => store.setFairness({ mode: 'pct' })}>Percentage (standard)</button>
+        {CUSHION_CHOICES.map((c) => (
+          <button key={c} className="go"
+            style={fairness.mode === 'cushion' && fairness.cents === c ? { outline: '3px solid #f5b301' } : undefined}
+            onClick={() => store.setFairness({ mode: 'cushion', cents: c })}>{fmtCushion(c)}</button>
+        ))}
+      </div>
       {selKid && (
         <>
+          <h4>👀 Parent view — values &amp; gift ideas for {selKid.name.split(' ')[0]}</h4>
+          <p>Everything below follows the kid picked with 📚 Open binder above.</p>
           <h4>📚 {selKid.emoji} {selKid.name}&rsquo;s binder value</h4>
           <p>
-            {value.count} cards ({value.distinct} kinds) worth about <b>${value.total.toFixed(2)}</b>.
+            {value.count} card{value.count === 1 ? '' : 's'} ({kindWord(value.distinct)}) worth about <b>${value.total.toFixed(2)}</b>.
             Doubles (trade pile) worth about <b>${value.duplicatesValue.toFixed(2)}</b>.
             Japanese cards are counted at their converted USD value, same as trades.
           </p>
           <h4>🎁 Gift Radar — {selKid.name.split(' ')[0]}&rsquo;s closest sets</h4>
-          {!topSets.length && <p>No cards yet — scan some into the binder and gift ideas appear here.</p>}
+          <p>
+            Cards {selKid.name.split(' ')[0]} is <b>MISSING</b> from the sets he&rsquo;s closest to
+            finishing — gift ideas for family. These aren&rsquo;t his cards; they&rsquo;re what&rsquo;s
+            left to complete the set.
+          </p>
+          {!progress.length && <p>No cards yet — scan some into the binder and gift ideas appear here.</p>}
+          {!!progress.length && !topSets.length && (
+            <p>No set is close yet — once {selKid.name.split(' ')[0]} has a good chunk of one set scanned in, gift ideas will show up here.</p>
+          )}
           {!!topSets.length && (
             <>
               <p>{topSets.map((s) => `${s.setName} (${s.owned}/${s.total})`).join(' · ')}</p>
@@ -675,7 +714,12 @@ export function ParentLayer() {
                     onClick={() => setBudget(b)}>{b === 'any' ? 'Any price' : `Under $${b}`}</button>
                 ))}
               </div>
-              {radar.slice(0, 30).map((c) => (
+              {!!radar.length && (
+                <p>{radar.length > 10
+                  ? `Cheapest 10 of ${radar.length} missing`
+                  : `All ${radar.length} missing card${radar.length === 1 ? '' : 's'}`}:</p>
+              )}
+              {radar.slice(0, 10).map((c) => (
                 <div key={c.ref} className="manualResult">
                   {c.thumb ? <img src={c.thumb} alt={c.name} /> : null}
                   <span>{c.name} — {c.set} #{c.number} — {typeof c.price === 'number' ? `$${c.price.toFixed(2)}` : 'no price listed'}</span>

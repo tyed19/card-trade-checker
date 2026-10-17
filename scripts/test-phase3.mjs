@@ -8,6 +8,8 @@ import {
   binderList, duplicates, spareCopies, binderValue, setProgress,
   perfectSwaps, giftIdeas, spareHolders, autoBalance, giftRadar,
   fairTraderBadge, kidFairTrades, setBadges, FAIR_BAND,
+  fairnessBand, verdictKind, normalizeFairness, fmtCushion,
+  radarQualifies, radarSets,
 } from '../lib/logic.js';
 import { encodePayload, decodePayload, packCards, unpackCards, refToCode, codeToRef } from '../lib/links.js';
 import * as store from '../lib/store.js';
@@ -191,5 +193,129 @@ ok('applyTradeMove decrements giver, increments receiver; log feeds badge count'
   assert.equal(kidFairTrades(store.getState().trades, a.id).length, 2);
   assert.equal(fairTraderBadge(kidFairTrades(store.getState().trades, a.id).length).tier.name, 'First Fair Trade');
 });
+
+console.log('logic: fairness setting — shared verdict predicate');
+ok('percentage mode (default) is the legacy rule', () => {
+  // $2.00 vs $2.20: ratio .091 <= .15 -> FAIR
+  assert.equal(verdictKind(2.00, 2.20, {}).kind, 'fair');
+  assert.equal(verdictKind(2.00, 2.20, { fairness: { mode: 'pct' } }).kind, 'fair');
+  // $2.00 vs $2.90: ratio .310 -> not FAIR (it is ALMOST, <= .40)
+  const v = verdictKind(2.00, 2.90, {});
+  assert.notEqual(v.kind, 'fair');
+  assert.equal(v.kind, 'almost');
+  // $2.00 vs $4.00: ratio .50 -> NOT FAIR outright
+  assert.equal(verdictKind(2.00, 4.00, {}).kind, 'notfair');
+  // EUR widens x1.5 in pct mode too: ratio .20 fair only with EUR
+  assert.equal(verdictKind(2.00, 2.50, {}).kind, 'almost');
+  assert.equal(verdictKind(2.00, 2.50, { eur: true }).kind, 'fair');
+  const b = fairnessBand({ hi: 100 }, undefined);
+  assert.equal(b.fairMax, 15); assert.equal(b.almostMax, 40);
+  const be = fairnessBand({ hi: 100, eur: true }, undefined);
+  assert.ok(Math.abs(be.fairMax - 22.5) < 1e-9); assert.ok(Math.abs(be.almostMax - 60) < 1e-9);
+});
+ok('cushion 50¢: absolute-dollar windows, ALMOST = 3x', () => {
+  const F = { mode: 'cushion', cents: 50 };
+  assert.equal(verdictKind(2.00, 2.40, { fairness: F }).kind, 'fair');   // gap .40 <= .50
+  const wide = verdictKind(2.00, 3.20, { fairness: F });                  // gap 1.20
+  assert.notEqual(wide.kind, 'fair');
+  assert.equal(wide.kind, 'almost');                                     // <= ALMOST cap 1.50
+  assert.equal(wide.band.almostMax, 1.5);
+  assert.equal(verdictKind(2.00, 2.90, { fairness: F }).kind, 'almost'); // gap .90
+  assert.equal(verdictKind(2.00, 4.00, { fairness: F }).kind, 'notfair');// gap 2.00 > 1.50
+});
+ok('cushion 10¢: penny trades get a sane window', () => {
+  const F = { mode: 'cushion', cents: 10 };
+  assert.equal(verdictKind(0.33, 0.40, { fairness: F }).kind, 'fair');   // gap .07 <= .10
+  const v = verdictKind(0.33, 0.50, { fairness: F });                    // gap .17
+  assert.notEqual(v.kind, 'fair');
+  assert.equal(v.kind, 'almost');                                        // <= .30
+});
+ok('cushion mode + EUR card widens the cushion x1.5', () => {
+  const F = { mode: 'cushion', cents: 50 };
+  // gap .70: FAIR only because 50¢ -> 75¢ with an EUR card involved
+  assert.equal(verdictKind(2.00, 2.70, { fairness: F, eur: true }).kind, 'fair');
+  assert.equal(verdictKind(2.00, 2.70, { fairness: F, eur: false }).kind, 'almost');
+  assert.equal(fairnessBand({ eur: true }, F).fairMax, 0.75);
+});
+ok('normalizeFairness: junk and missing settings fall back to pct', () => {
+  assert.deepEqual(normalizeFairness(undefined), { mode: 'pct' });
+  assert.deepEqual(normalizeFairness(null), { mode: 'pct' });
+  assert.deepEqual(normalizeFairness({ mode: 'cushion', cents: 999 }), { mode: 'pct' });
+  assert.deepEqual(normalizeFairness({ mode: 'cushion', cents: 25 }), { mode: 'cushion', cents: 25 });
+  assert.equal(fmtCushion(10), '10¢'); assert.equal(fmtCushion(50), '50¢');
+  assert.equal(fmtCushion(100), '$1'); assert.equal(fmtCushion(200), '$2');
+  assert.equal(fmtCushion(150), '$1.50');
+});
+ok('perfectSwaps honors the cushion setting via the shared predicate', () => {
+  const a = B([['s1', 2, mkCard('s1', 2.00)]]);
+  const b = B([['s2', 2, mkCard('s2', 2.40)]]);
+  // gap .40 on a 2.40 hi = ratio .167 > .15: no pair under percentage
+  assert.equal(perfectSwaps(a, b).length, 0);
+  // ...but inside a 50¢ cushion: a pair
+  assert.equal(perfectSwaps(a, b, 10, { fairness: { mode: 'cushion', cents: 50 } }).length, 1);
+  // ...and outside a 25¢ cushion: no pair
+  assert.equal(perfectSwaps(a, b, 10, { fairness: { mode: 'cushion', cents: 25 } }).length, 0);
+});
+ok('autoBalance absBand: in-band test is absolute dollars in cushion mode', () => {
+  // gap $1.00; a $0.60 spare leaves a $0.40 gap: in the % band
+  // (.133 <= .15) but outside a 25¢ cushion.
+  const r1 = autoBalance({ hiTotal: 3, loTotal: 2, spares: [{ ref: 'x', card: mkCard('x', 0.60) }], absBand: 0.25 });
+  assert.equal(r1.landsInBand, false);
+  // a $0.80 spare leaves $0.20 <= 25¢: lands.
+  const r2 = autoBalance({ hiTotal: 3, loTotal: 2, spares: [{ ref: 'y', card: mkCard('y', 0.80) }], absBand: 0.25 });
+  assert.equal(r2.landsInBand, true);
+});
+
+console.log('logic: gift radar qualification');
+ok('radarQualifies: 1/195 no, 30/195 yes (>=15 cards), 12/100 yes (12%)', () => {
+  const one = B([['r1', 1, mkCard('r1', 1, { setId: 'big', setTotal: 195, number: '1' })]]);
+  const p1 = setProgress(one)[0];
+  assert.equal(p1.owned, 1); assert.equal(p1.total, 195);
+  assert.equal(radarQualifies(p1), false);
+  assert.equal(radarSets(setProgress(one)).length, 0);
+  const many = [];
+  for (let i = 0; i < 30; i++) many.push(['m' + i, 1, mkCard('m' + i, 1, { setId: 'big', setTotal: 195, number: String(i + 1) })]);
+  const p30 = setProgress(B(many))[0];
+  assert.equal(p30.owned, 30);
+  assert.equal(radarQualifies(p30), true); // 30 >= 15 cards (pct is only ~15.4% too)
+  const pctSet = [];
+  for (let i = 0; i < 12; i++) pctSet.push(['p' + i, 1, mkCard('p' + i, 1, { setId: 'mid', setTotal: 100, number: String(i + 1) })]);
+  const p12 = setProgress(B(pctSet))[0];
+  assert.equal(p12.owned, 12); // < 15 cards...
+  assert.equal(radarQualifies(p12), true); // ...but 12% >= 10%
+  const under = [];
+  for (let i = 0; i < 14; i++) under.push(['u' + i, 1, mkCard('u' + i, 1, { setId: 'big2', setTotal: 195, number: String(i + 1) })]);
+  assert.equal(radarQualifies(setProgress(B(under))[0]), false); // 14 cards, 7.2%: neither bar
+});
+
+console.log('store: fairness setting + migration');
+// A save written BEFORE the fairness field existed must load with
+// the pct default and keep kids/binders intact. Fresh module
+// instance + a localStorage shim holding the legacy JSON.
+{
+  const legacy = JSON.stringify({
+    v: 1,
+    kids: [{ id: 'kx', name: 'Legacy Kid', emoji: '🦊', color: '#123456' }],
+    binders: { kx: { e19: { qty: 2, id: 'swsh5-19', addedAt: 1 } } },
+    trades: [], activeKidId: 'kx',
+    // note: NO fairness field — pre-setting save
+  });
+  globalThis.window = { localStorage: { getItem: () => legacy, setItem: () => {} } };
+  try {
+    const fresh = await import('../lib/store.js?fairness-migration=1');
+    const st = fresh.getState();
+    assert.equal(st.kids.length, 1);
+    assert.equal(st.kids[0].name, 'Legacy Kid');
+    assert.equal(st.binders.kx.e19.qty, 2);
+    assert.deepEqual(st.fairness, { mode: 'pct' });
+    fresh.setFairness({ mode: 'cushion', cents: 50 });
+    assert.deepEqual(fresh.getState().fairness, { mode: 'cushion', cents: 50 });
+    fresh.setFairness({ mode: 'pct' });
+    assert.deepEqual(fresh.getState().fairness, { mode: 'pct' });
+    passed++; console.log('  ✓ legacy save (no fairness field) migrates: pct default, kids/binders intact, setFairness round-trips');
+  } finally {
+    delete globalThis.window;
+  }
+}
 
 console.log(`\nALL ${passed} FIXTURE TESTS PASSED`);

@@ -7,7 +7,7 @@ import {
   addCandidateToBinder, resolveCandidateRef,
 } from './binder-ui';
 import * as store from '../lib/store';
-import { spareCopies, autoBalance } from '../lib/logic';
+import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, FAIR_BAND } from '../lib/logic';
 import { decodePayload } from '../lib/links';
 
 const DEMO = {
@@ -346,33 +346,47 @@ export default function Home() {
     setVerdict(null);
   }
 
+  // Grown-ups-only, plain-words statement of the rule behind a
+  // verdict when the fairness cushion setting is in play (in
+  // percentage mode the static explainer below already says it).
+  function fairnessRuleNote(band, gap) {
+    if (!band || band.mode !== 'cushion') return null;
+    const base = fmtCushion(band.cents);
+    const eff = fmtCushion(Math.round(band.cents * band.widen));
+    return band.eur
+      ? `Verdict rule: your ${base} fairness cushion, widened to ${eff} because a Japanese (EUR-priced) card is in this trade. The two sides are $${gap.toFixed(2)} apart.`
+      : `Verdict rule: your ${base} fairness cushion. The two sides are $${gap.toFixed(2)} apart.`;
+  }
+
   async function checkTrade(mCards = sides.mine.cards, tCards = sides.theirs.cards) {
     const allCards = [...mCards, ...tCards];
     // Japanese printings are priced from Cardmarket (EUR) and converted —
     // that estimate is softer than a USD TCGplayer price, so when any
     // card in the trade is EUR-sourced the fair window widens x1.5.
+    // The verdict itself comes from the ONE shared predicate
+    // (lib/logic.js verdictKind), driven by the grown-ups fairness
+    // setting: percentage bands or an absolute-dollar cushion.
     const eurInTrade = allCards.some((c) => c.currency === 'EUR');
-    const fairBand = eurInTrade ? 0.15 * 1.5 : 0.15;
-    const almostBand = eurInTrade ? 0.4 * 1.5 : 0.4;
     const mineTotal = mCards.reduce((sum, c) => sum + (c.price || 0), 0);
     const theirsTotal = tCards.reduce((sum, c) => sum + (c.price || 0), 0);
-    const hi = Math.max(mineTotal, theirsTotal);
     const lo = Math.min(mineTotal, theirsTotal);
-    const diffRatio = hi > 0 ? (hi - lo) / hi : 0;
+    const { kind, gap, band } = verdictKind(mineTotal, theirsTotal, {
+      eur: eurInTrade, fairness: binderState.fairness,
+    });
     let v;
-    if (diffRatio <= fairBand) {
+    if (kind === 'fair') {
       v = { kind: 'fair', face: '😄', big: 'FAIR TRADE!', sub: 'Both sides match. Trade away! 🎉' };
       try {
         const confetti = (await import('canvas-confetti')).default;
         confetti({ particleCount: 180, spread: 80, origin: { y: 0.7 } });
       } catch { /* no confetti, no problem */ }
-    } else if (diffRatio <= almostBand) {
+    } else if (kind === 'almost') {
       v = { kind: 'almost', face: '😐', big: 'ALMOST FAIR!', sub: 'Pretty close! A little more would make it fair.' };
     } else {
       const lighterCards = mineTotal < theirsTotal ? mCards : tCards;
       const lighterName = mineTotal < theirsTotal ? 'MY side' : 'THEIR side';
       const avg = lighterCards.length ? lo / lighterCards.length : lo || 1;
-      const extra = Math.max(1, Math.round((hi - lo) / (avg || 1)));
+      const extra = Math.max(1, Math.round(gap / (avg || 1)));
       v = {
         kind: 'notfair', face: '😟', big: 'NOT FAIR!',
         sub: `${lighterName} needs about ${extra} more card${extra > 1 ? 's' : ''} like theirs!`,
@@ -381,6 +395,7 @@ export default function Home() {
     }
     v.mineTotal = mineTotal;
     v.theirsTotal = theirsTotal;
+    v.ruleNote = fairnessRuleNote(band, gap);
     setVerdict(v);
     setTradedDone(false);
     // FAIR and ALMOST lines are fully static -> recorded clips. The
@@ -454,16 +469,23 @@ export default function Home() {
     });
     if (!spares.length) return null;
     const eur = [...sides.mine.cards, ...sides.theirs.cards].some((c) => c.currency === 'EUR');
+    // Same shared predicate as the verdict: in percentage mode the
+    // in-band test is the (possibly EUR-widened) ratio; in cushion
+    // mode it is the absolute-dollar fairMax.
+    const fb = fairnessBand({
+      hi: Math.max(verdict.mineTotal, verdict.theirsTotal), eur,
+    }, binderState.fairness);
     const res = autoBalance({
       hiTotal: Math.max(verdict.mineTotal, verdict.theirsTotal),
       loTotal: Math.min(verdict.mineTotal, verdict.theirsTotal),
       spares,
-      band: eur ? 0.15 * 1.5 : 0.15,
+      band: fb.fairRatio != null ? fb.fairRatio : FAIR_BAND,
+      absBand: fb.mode === 'cushion' ? fb.fairMax : null,
     });
     if (!res) return null;
     return { ...res, light, kid: binderState.kids.find((k) => k.id === kidId) || null };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [verdict, sides, sideKids, allLists]);
+  }, [verdict, sides, sideKids, allLists, binderState.fairness]);
 
   function applyBalance() {
     if (!balance || !verdict) return;
@@ -759,10 +781,24 @@ export default function Home() {
             <p style={{ opacity: 0.75 }}>
               Prices come from the app's own card catalog (TCGplayer market for English cards, Cardmarket trend
               converted from EUR for Japanese cards, via TCGdex data), refreshed nightly.
-              Demo cards use fixed example prices. Verdict: within 15% is fair, within 40% is almost fair —
-              both windows widen x1.5 when a EUR-priced (Japanese) card is part of the trade.
+              Demo cards use fixed example prices.{' '}
+              {normalizeFairness(binderState.fairness).mode === 'cushion' ? (
+                <>Verdict: your fairness cushion is set to {fmtCushion(normalizeFairness(binderState.fairness).cents)} —
+                a trade is fair when the two sides are within that much of each other, almost fair within 3x that.
+                The cushion widens x1.5 when a EUR-priced (Japanese) card is part of the trade.
+                Change it under ⚖️ Fairness cushion below.</>
+              ) : (
+                <>Verdict: within 15% is fair, within 40% is almost fair —
+                both windows widen x1.5 when a EUR-priced (Japanese) card is part of the trade.
+                You can switch to a fixed-dollar window under ⚖️ Fairness cushion below.</>
+              )}
             </p>
-            <ParentLayer />
+            {verdict && verdict.ruleNote && <p style={{ opacity: 0.9 }}>⚖️ {verdict.ruleNote}</p>}
+            <ParentLayer onOpenBinder={(kidId) => {
+              store.setActiveKid(kidId);
+              setGrownOpen(false);
+              go('binder');
+            }} />
           </div>
         )}
       </div>
