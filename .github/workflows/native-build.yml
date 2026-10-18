@@ -31,7 +31,16 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      # NB: android-actions/setup-android@v3 crashed inside its own
+      # bundled sdkmanager on current runner images (run 39145435756) —
+      # the runner image already ships an Android SDK, so install the
+      # exact components Capacitor 8 targets (variables.gradle: SDK 36)
+      # with the preinstalled sdkmanager instead.
+      - name: Install Android SDK 36 components
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
       - name: Install deps + sync shell assets
         run: |
           npm ci
