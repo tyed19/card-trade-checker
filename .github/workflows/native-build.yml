@@ -1,0 +1,77 @@
+name: Native shell builds
+
+# Proof that the committed Capacitor projects compile. Manual dispatch
+# only — the web app deploys via Vercel on every push; native builds
+# are a Phase-1 checkpoint, not a per-push gate (and the macOS job
+# bills minutes at 10x, so it runs when a human asks for it).
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which platform job to run
+        type: choice
+        options:
+          - android
+          - ios
+          - both
+        default: android
+
+jobs:
+  android:
+    name: Android — unsigned debug APK/AAB compile proof
+    if: inputs.platform == 'android' || inputs.platform == 'both'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install deps + sync shell assets
+        run: |
+          npm ci
+          npx cap sync android
+      - name: Build unsigned release AAB (compile proof)
+        working-directory: android
+        run: ./gradlew bundleRelease -x lint --stacktrace
+      - name: Build debug APK (installable proof)
+        working-directory: android
+        run: ./gradlew assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fairswap-android-debug
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: warn
+
+  ios:
+    name: iOS — unsigned archive compile proof
+    if: inputs.platform == 'ios' || inputs.platform == 'both'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install deps + sync shell assets
+        run: |
+          npm ci
+          npx cap sync ios
+      - name: Archive without signing (compile proof)
+        working-directory: ios/App
+        run: |
+          xcodebuild archive \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/FairSwap.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          test -d "$RUNNER_TEMP/FairSwap.xcarchive"

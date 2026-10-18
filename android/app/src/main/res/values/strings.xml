@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FairSwap</string>
+    <string name="title_activity_main">FairSwap</string>
+    <string name="package_name">app.fairswap</string>
+    <string name="custom_url_scheme">app.fairswap</string>
+</resources>

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>FairSwap</title>
+<style>
+  /* Bundled offline/loading fallback for the native shell.
+     In remote-URL mode Capacitor loads the live web app; this page is
+     the webDir payload and only surfaces if the remote app cannot be
+     reached. Brand: Deep Teal ground, reversed mark (usage-spec.md). */
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #00596B; color: #FDF2DC;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; box-sizing: border-box;
+  }
+  svg { width: 148px; height: 148px; }
+  h1 { font-size: 28px; margin: 20px 0 6px; letter-spacing: .2px; }
+  p { margin: 0 0 22px; opacity: .85; font-size: 16px; line-height: 1.45; }
+  a.retry {
+    display: inline-block; background: #FF7156; color: #123B44; font-weight: 700;
+    text-decoration: none; padding: 14px 26px; border-radius: 999px; font-size: 17px;
+  }
+  .spin { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+</style>
+</head>
+<body>
+  <!-- FairSwap mark, reversed variant (fairswap-mark-reversed.svg) -->
+  <svg class="spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="FairSwap">
+    <path d="M 204.05 157.42 A 92 92 0 0 0 135.98 29.4" fill="none" stroke="#FF7156" stroke-width="22" stroke-linecap="round"/>
+    <path d="M 63.36 47.5 A 92 92 0 0 0 145.36 208.44" fill="none" stroke="#FF7156" stroke-width="22" stroke-linecap="round"/>
+    <path d="M 120.12 26.6 C 129.51 13.08 145.43 8.88 167.15 11.54 Q 162.02 33.99 159.16 56.84 C 137.84 51.91 124.32 42.52 120.12 26.6 Z" fill="#FF7156" stroke="#FF7156" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M 160.83 204 C 158.32 220.27 145.85 231.02 125.17 238.15 Q 119.93 215.73 112.49 193.93 C 133.81 189.02 150.08 191.53 160.83 204 Z" fill="#FF7156" stroke="#FF7156" stroke-width="3" stroke-linejoin="round"/>
+    <g fill="#FDF2DC"><rect x="46" y="70" width="110" height="96" rx="13" transform="rotate(4 101 118)"/></g>
+    <g transform="translate(-7 0)"><g fill="#044757"><rect x="89" y="56" width="90" height="130" rx="13" transform="rotate(10 134 121)"/></g></g>
+    <g fill="#FDF2DC"><rect x="89" y="56" width="90" height="130" rx="13" transform="rotate(10 134 121)"/></g>
+  </svg>
+  <h1>FairSwap</h1>
+  <p class="spin">Getting your cards ready…</p>
+  <p>If this screen stays, the app could not reach the internet.<br />Check your connection, then tap below.</p>
+  <a class="retry" id="retry" href="https://card-trade-checker.vercel.app">Tap to try again</a>
+  <script>
+    // Keep the retry target in sync with the shell's configured URL
+    // when Capacitor injects its bridge; harmless in a plain browser.
+    try {
+      var url = window.Capacitor && window.Capacitor.config && window.Capacitor.config.server && window.Capacitor.config.server.url;
+      if (url) document.getElementById('retry').href = url;
+    } catch (e) { /* default link stands */ }
+  </script>
+</body>
+</html>

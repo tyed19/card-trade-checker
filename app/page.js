@@ -14,6 +14,7 @@ import {
 import * as store from '../lib/store';
 import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, fmtPriceLine, FAIR_BAND } from '../lib/logic';
 import { decodePayload } from '../lib/links';
+import { takeNativePhoto, verdictHaptic } from '../lib/native';
 
 const DEMO = {
   mine: {
@@ -357,6 +358,18 @@ export default function Home() {
     setTradedDone(false);
   }
 
+  // Photo button: inside the native shell, use the real camera
+  // plugin (better capture, no file-picker detour); in a browser —
+  // or if the plugin fails for any reason — click the hidden file
+  // input exactly as before. A cancelled camera is a no-op, never a
+  // fallback (the kid just changed their mind).
+  async function onPhotoButton(side) {
+    const shot = await takeNativePhoto();
+    if (shot === 'cancelled') return;
+    if (shot) { onPhoto(side, shot); return; }
+    fileRefs[side].current && fileRefs[side].current.click();
+  }
+
   async function onPhoto(side, file) {
     if (!file) return;
     // New scan, new sequence: any response still in flight for this
@@ -487,6 +500,7 @@ export default function Home() {
     // right after the clip finishes.
     if (v.kind === 'fair') {
       playClip('fair', v.big + ' ' + v.sub);
+      verdictHaptic(); // native shell only; inert in a browser
     } else if (v.kind === 'almost') {
       playClip('almost', v.big + ' ' + v.sub);
     } else {
@@ -667,7 +681,7 @@ export default function Home() {
           capture="environment"
           onChange={(e) => { onPhoto(side, e.target.files && e.target.files[0]); e.target.value = ''; }}
         />
-        <button className="photoBtn" disabled={s.busy} onClick={() => fileRefs[side].current && fileRefs[side].current.click()}>
+        <button className="photoBtn" disabled={s.busy} onClick={() => onPhotoButton(side)}>
           {s.busy ? 'LOOKING…' : s.cards.length
             ? <><IconPlus size={30} /> ADD A CARD</>
             : <><IconCamera size={30} /> TAKE A PICTURE</>}

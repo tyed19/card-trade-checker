@@ -1,6 +1,17 @@
 node_modules/
 .next/
 out/
+# Native shell (Capacitor): build outputs never committed — the
+# ios/ and android/ PROJECTS are committed, their products are not.
+android/.gradle/
+android/app/build/
+android/build/
+android/app/src/main/assets/public/
+ios/App/Pods/
+ios/App/App/public/
+ios/App/DerivedData/
+*.xcworkspace
+xcuserdata/
 *.log
 .env*.local
 .vercel

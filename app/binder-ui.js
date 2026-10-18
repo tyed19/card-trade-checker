@@ -19,6 +19,7 @@ import {
 // "1 kind" / "3 kinds" — the count word agrees with the number.
 const kindWord = (n) => `${n} kind${n === 1 ? '' : 's'}`;
 import { giftPath, binderImportPath } from '../lib/links';
+import { takeNativePhoto } from '../lib/native';
 import {
   IconScales, IconBinder, IconCards, IconCardPlus, IconCamera, IconBulb,
   IconStar, IconCheck, IconX, IconGift, IconSwap, IconTrash,
@@ -432,9 +433,24 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
   const fileRef = useRef(null);
   if (!kid) return <div className="screenNote">Add a kid in the grown-ups section first!</div>;
 
-  async function onPhoto(e) {
+  // Same bridge as the trade panels: native shell → camera plugin,
+  // browser (or any plugin failure) → the hidden file input below. A
+  // cancelled camera is a no-op. The file from either source flows
+  // through the identical shrink + identify pipeline in onPhotoFile.
+  async function onTakePicture() {
+    const shot = await takeNativePhoto();
+    if (shot === 'cancelled') return;
+    if (shot) { onPhotoFile(shot); return; }
+    fileRef.current && fileRef.current.click();
+  }
+
+  function onPhoto(e) {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
+    if (file) onPhotoFile(file);
+  }
+
+  async function onPhotoFile(file) {
     if (!file) return;
     setBusy(true); setChoices(null); setStatus('');
     playClip('looking', '');
@@ -505,7 +521,7 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
       ) : (
         <>
           <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
-          <button className="photoBtn big" disabled={busy} onClick={() => fileRef.current && fileRef.current.click()}>
+          <button className="photoBtn big" disabled={busy} onClick={onTakePicture}>
             {busy ? 'Looking…' : <><IconCamera size={30} /> TAKE A PICTURE</>}
           </button>
         </>
