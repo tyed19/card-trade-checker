@@ -12,7 +12,7 @@ import {
   IconBack, IconRefresh, IconDice, IconStar,
 } from './icons';
 import * as store from '../lib/store';
-import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, fmtPriceLine, FAIR_BAND } from '../lib/logic';
+import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, fmtPriceLine, priceCoverage, tradeIsUnpriceable, FAIR_BAND } from '../lib/logic';
 import { decodePayload } from '../lib/links';
 import { takeNativePhoto, verdictHaptic } from '../lib/native';
 
@@ -453,6 +453,19 @@ export default function Home() {
       : `Verdict rule: your ${base} fairness cushion. The two sides are $${gap.toFixed(2)} apart.`;
   }
 
+  // Kid-simple line naming the cards a verdict could NOT count
+  // because the data has no price for them — shown inside the verdict
+  // box so a partial-price comparison never silently treats them as
+  // $0.00. (The all-unpriced case gets its own verdict kind instead.)
+  function unpricedNoteText(v) {
+    const bits = [];
+    if (v.unpricedMine) bits.push(`${v.unpricedMine} card${v.unpricedMine > 1 ? 's' : ''} on MY side`);
+    if (v.unpricedTheirs) bits.push(`${v.unpricedTheirs} card${v.unpricedTheirs > 1 ? 's' : ''} on THEIR side`);
+    if (!bits.length) return null;
+    const total = (v.unpricedMine || 0) + (v.unpricedTheirs || 0);
+    return `No price for ${bits.join(' and ')} — we didn't count ${total > 1 ? 'them' : 'it'}!`;
+  }
+
   async function checkTrade(mCards = sides.mine.cards, tCards = sides.theirs.cards) {
     const allCards = [...mCards, ...tCards];
     // Japanese printings are priced from Cardmarket (EUR) and converted —
@@ -468,8 +481,20 @@ export default function Home() {
     const { kind, gap, band } = verdictKind(mineTotal, theirsTotal, {
       eur: eurInTrade, fairness: binderState.fairness,
     });
+    // Price coverage: how many cards on each side the data actually
+    // prices. Unpriced cards sum as $0 above, which used to let two
+    // unpriced cards "match" at $0.00 = $0.00 and earn FAIR TRADE! —
+    // when NOTHING on either side is priced there is no verdict to
+    // give, only an honest "we don't know" (lib/logic.js).
+    const mCov = priceCoverage(mCards);
+    const tCov = priceCoverage(tCards);
     let v;
-    if (kind === 'fair') {
+    if (tradeIsUnpriceable(mCards, tCards)) {
+      v = {
+        kind: 'noprices', faceIcon: 'search', big: 'NO PRICES FOUND!',
+        sub: "We don't know what these cards cost yet, so we can't tell if this trade is fair.",
+      };
+    } else if (kind === 'fair') {
       v = { kind: 'fair', faceIcon: 'check', big: 'FAIR TRADE!', sub: 'Both sides match. Trade away!' };
       try {
         const confetti = (await import('canvas-confetti')).default;
@@ -490,7 +515,11 @@ export default function Home() {
     }
     v.mineTotal = mineTotal;
     v.theirsTotal = theirsTotal;
-    v.ruleNote = fairnessRuleNote(band, gap);
+    v.unpricedMine = mCov.unpriced;
+    v.unpricedTheirs = tCov.unpriced;
+    // The cushion rule note explains a verdict derived from prices —
+    // meaningless (and misleading) when there were no prices at all.
+    v.ruleNote = v.kind === 'noprices' ? null : fairnessRuleNote(band, gap);
     setVerdict(v);
     setStaleNote(false);
     setTradedDone(false);
@@ -503,6 +532,10 @@ export default function Home() {
       verdictHaptic(); // native shell only; inert in a browser
     } else if (v.kind === 'almost') {
       playClip('almost', v.big + ' ' + v.sub);
+    } else if (v.kind === 'noprices') {
+      // No recorded clip exists for this line: playClip falls back to
+      // the friendly system voice reading the on-screen words.
+      playClip('noprices', v.big + ' ' + v.sub);
     } else {
       playClip('notfair', v.big).then(() => synthSpeak(v.sub));
     }
@@ -555,7 +588,7 @@ export default function Home() {
   // side, or the only kid when exactly one binder exists; otherwise
   // the button hides (we don't guess whose cards to offer).
   const balance = useMemo(() => {
-    if (!verdict || verdict.kind === 'fair') return null;
+    if (!verdict || verdict.kind === 'fair' || verdict.kind === 'noprices') return null;
     const light = verdict.mineTotal <= verdict.theirsTotal ? 'mine' : 'theirs';
     const kidId = sideKids[light] || (binderState.kids.length === 1 ? binderState.kids[0].id : null);
     if (!kidId) return null;
@@ -825,9 +858,13 @@ export default function Home() {
             {verdict.faceIcon === 'check' && <IconCheck size={72} />}
             {verdict.faceIcon === 'scales' && <IconScales size={72} />}
             {verdict.faceIcon === 'x' && <IconX size={72} />}
+            {verdict.faceIcon === 'search' && <IconSearch size={72} />}
           </div>
           <div className="big">{verdict.big}</div>
           <div className="sub">{verdict.sub}</div>
+          {verdict.kind !== 'noprices' && unpricedNoteText(verdict) && (
+            <div className="unpricedNote">{unpricedNoteText(verdict)}</div>
+          )}
           {verdict.kind !== 'fair' && balance && (
             <div className="balanceBox">
               <div className="balanceHead"><IconScales size={25} /> MAKE IT FAIR{balance.kid ? ` — ${balance.kid.emoji} ${balance.kid.name}'s doubles` : ''}</div>

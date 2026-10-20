@@ -10,6 +10,7 @@ import {
   fairTraderBadge, kidFairTrades, setBadges, FAIR_BAND,
   fairnessBand, verdictKind, normalizeFairness, fmtCushion,
   radarQualifies, radarSets, fmtPriceLine,
+  priceCoverage, tradeIsUnpriceable,
 } from '../lib/logic.js';
 import { encodePayload, decodePayload, packCards, unpackCards, refToCode, codeToRef } from '../lib/links.js';
 import * as store from '../lib/store.js';
@@ -225,6 +226,31 @@ ok('applyTradeMove decrements giver, increments receiver; log feeds badge count'
   store.logTrade({ aKid: b.id, bKid: a.id, aRefs: [], bRefs: [] });
   assert.equal(kidFairTrades(store.getState().trades, a.id).length, 2);
   assert.equal(fairTraderBadge(kidFairTrades(store.getState().trades, a.id).length).tier.name, 'First Fair Trade');
+});
+
+console.log('logic: price coverage — the no-price honesty gate');
+ok('priceCoverage counts priced vs unpriced cards', () => {
+  assert.deepEqual(priceCoverage([mkCard('a', 1.5), mkCard('b', null)]), { priced: 1, unpriced: 1 });
+  assert.deepEqual(priceCoverage([mkCard('a', null), mkCard('b', null)]), { priced: 0, unpriced: 2 });
+  assert.deepEqual(priceCoverage([]), { priced: 0, unpriced: 0 });
+  assert.deepEqual(priceCoverage([{ name: 'no price field at all' }]), { priced: 0, unpriced: 1 });
+});
+ok('tradeIsUnpriceable: two unpriced sides can never earn a verdict', () => {
+  // The 2026-10-19 bug: an Articuno vs a Dialga, both price-less in
+  // the data, summed $0.00 = $0.00 and got a green FAIR TRADE!.
+  // verdictKind alone still calls 0-vs-0 fair — the gate is what
+  // stops checkTrade from ever asking it to.
+  assert.equal(verdictKind(0, 0, {}).kind, 'fair');
+  assert.equal(tradeIsUnpriceable([mkCard('a', null)], [mkCard('b', null)]), true);
+  assert.equal(tradeIsUnpriceable([mkCard('a', null), mkCard('a2', null)], [mkCard('b', null)]), true);
+  // Any priced card on either side -> the normal verdict path runs
+  // on the priced totals, with the unpriced ones surfaced as a note.
+  assert.equal(tradeIsUnpriceable([mkCard('a', null)], [mkCard('b', 0.25)]), false);
+  assert.equal(tradeIsUnpriceable([mkCard('a', 3)], [mkCard('b', null)]), false);
+  assert.equal(tradeIsUnpriceable([mkCard('a', 3)], [mkCard('b', 3.1)]), false);
+  // An empty side is not a trade at all — not this gate's business.
+  assert.equal(tradeIsUnpriceable([], [mkCard('b', null)]), false);
+  assert.equal(tradeIsUnpriceable([mkCard('a', null)], []), false);
 });
 
 console.log('logic: fairness setting — shared verdict predicate');

@@ -107,6 +107,12 @@ input[type='file'] { display: none; }
 .verdict.fair { background: #14532d; border: 5px solid #2fbf71; }
 .verdict.almost { background: #713f12; border: 5px solid #f5b301; }
 .verdict.notfair { background: #7f1d1d; border: 5px solid #e63946; }
+.verdict.noprices { background: #1e3a5f; border: 5px solid #7dd3fc; }
+.unpricedNote {
+  margin: 12px auto 4px; max-width: 520px; padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.28); border-radius: 12px;
+  font-size: clamp(15px, 4.5vw, 20px); font-weight: bold;
+}
 .againBtn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   margin-top: 16px; padding: 16px 26px; border: none; border-radius: 14px; cursor: pointer;
