@@ -1,5 +1,5 @@
 {
-  "builtAt": "2026-10-23T14:46:15.458Z",
+  "builtAt": "2026-10-24T13:43:20.274Z",
   "model": "Xenova/clip-vit-base-patch32",
   "dims": 512,
   "indexVectors": 25889,
