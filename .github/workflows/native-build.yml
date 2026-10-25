@@ -1,10 +1,19 @@
 name: Native shell builds
 
-# Proof that the committed Capacitor projects compile. Manual dispatch
-# only — the web app deploys via Vercel on every push; native builds
-# are a Phase-1 checkpoint, not a per-push gate (and the macOS job
-# bills minutes at 10x, so it runs when a human asks for it).
+# Proof that the committed Capacitor projects compile, plus the
+# TestFlight upload job. Manual dispatch still controls the
+# android/ios compile proofs (the web app deploys via Vercel on
+# every push; native builds are a Phase-1 checkpoint, not a
+# per-push gate). The ios-testflight job is the exception: it runs
+# on every push to main, because it is the only route to a signed
+# iOS build — Tye's Mac cannot run Xcode 26, which App Store
+# Connect has required for uploads since 2026-04-28. On push runs
+# the android/ios jobs skip (their `inputs.platform` conditions
+# are false without a dispatch event); only ios-testflight runs.
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       platform:
@@ -84,3 +93,149 @@ jobs:
             -archivePath "$RUNNER_TEMP/FairSwap.xcarchive" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           test -d "$RUNNER_TEMP/FairSwap.xcarchive"
+
+  ios-testflight:
+    name: iOS — TestFlight upload (signed; compile check without secrets)
+    # Push runs this job; manual dispatch runs it for ios/both only
+    # (a dispatch for android alone must not trigger an upload).
+    if: github.event_name == 'push' || inputs.platform == 'ios' || inputs.platform == 'both'
+    # macos-15 ships Xcode 26.x but DEFAULTS to 16.4, so the job
+    # selects Xcode 26 explicitly below — without that step the
+    # upload is rejected (Xcode 26+ required since 2026-04-28).
+    # macos-14 is NOT used: it cannot reach Xcode 26 and retires
+    # 2026-11-02.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install deps + sync shell assets
+        run: |
+          npm ci
+          npx cap sync ios
+      - name: Select Xcode 26
+        run: |
+          XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -z "$XCODE_APP" ]; then
+            echo "::error::No Xcode 26 found on this runner image. macos-15 ships Xcode 26.x but defaults to 16.4 — this step selects it explicitly."
+            exit 1
+          fi
+          echo "Using $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+      # Secrets gate: the signed archive + upload need all three App
+      # Store Connect API secrets (Tye adds them by hand under repo
+      # Settings → Secrets and variables → Actions; they are NEVER
+      # created, printed, or echoed here — only emptiness is tested).
+      # Without them the job still proves the shell compiles (the
+      # unsigned archive below) and exits green. It never fails just
+      # because secrets are not set yet.
+      - name: Check for App Store Connect API secrets
+        id: gate
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_PRIVATE_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::App Store Connect API secrets are not all set — skipping TestFlight upload; running the unsigned compile check instead. Add APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID and APP_STORE_CONNECT_PRIVATE_KEY under repo Settings → Secrets and variables → Actions to enable uploads."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Archive without signing (compile check, no secrets yet)
+        if: steps.gate.outputs.ready != 'true'
+        working-directory: ios/App
+        run: |
+          xcodebuild archive \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/FairSwap.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          test -d "$RUNNER_TEMP/FairSwap.xcarchive"
+      - name: Write App Store Connect API key file
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          printf '%s' "$ASC_PRIVATE_KEY" > "$RUNNER_TEMP/asc-key.p8"
+          chmod 600 "$RUNNER_TEMP/asc-key.p8"
+      # Automatic signing in CI works via the API-key auth flags
+      # (-authenticationKey*), not an Apple ID session: Xcode uses
+      # the key to fetch/create the provisioning profile for team
+      # 723K7QK5NZ. Build number = the workflow run number, so it
+      # auto-increments per run and App Store Connect never sees a
+      # reused build number — except on a re-run of a run that
+      # already uploaded, which reuses the number; in that case
+      # push a new commit (or re-dispatch) instead of re-running.
+      # Marketing version stays 1.0 from the project, matching the
+      # App Store Connect record.
+      - name: Archive with automatic signing (API-key auth)
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: ios/App
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          xcodebuild archive \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/FairSwap.xcarchive" \
+            -authenticationKeyPath "$RUNNER_TEMP/asc-key.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -allowProvisioningUpdates \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            DEVELOPMENT_TEAM="723K7QK5NZ"
+          test -d "$RUNNER_TEMP/FairSwap.xcarchive"
+      - name: Export IPA for App Store Connect
+        id: export
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>723K7QK5NZ</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>stripSwiftSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/FairSwap.xcarchive" \
+            -exportPath "$RUNNER_TEMP/FairSwap-ipa" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -authenticationKeyPath "$RUNNER_TEMP/asc-key.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -allowProvisioningUpdates
+          IPA_PATH="$(ls "$RUNNER_TEMP"/FairSwap-ipa/*.ipa | head -n 1)"
+          test -n "$IPA_PATH"
+          echo "ipa=$IPA_PATH" >> "$GITHUB_OUTPUT"
+          ls "$RUNNER_TEMP/FairSwap-ipa"
+      - name: Upload to TestFlight
+        if: steps.gate.outputs.ready == 'true'
+        uses: apple-actions/upload-testflight-build@v3
+        with:
+          app-path: ${{ steps.export.outputs.ipa }}
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
