@@ -253,6 +253,41 @@ ok('tradeIsUnpriceable: two unpriced sides can never earn a verdict', () => {
   assert.equal(tradeIsUnpriceable([mkCard('a', null)], []), false);
 });
 
+console.log('logic: removing one card from a swap (trade tiles)');
+ok('removing one card recomputes that side only, with the shared total math', () => {
+  // removeCard() in app/page.js is React state (filter by index) and
+  // cardsChanged() clears any verdict; these fixtures pin the shared
+  // math that behavior depends on, using removeCard's exact operation.
+  const remove = (cards, idx) => cards.filter((_, i) => i !== idx);
+  const sideTotal = (cards) => cards.reduce((sum, c) => sum + (c.price || 0), 0);
+  const mine = [mkCard('m1', 2), mkCard('m2', 3)];
+  const theirs = [mkCard('t1', 4)];
+  const mineAfter = remove(mine, 0);
+  assert.deepEqual(mineAfter.map((c) => c.ref), ['m2']);
+  assert.equal(sideTotal(mineAfter), 3); // was 5: only the removed card leaves
+  assert.deepEqual(theirs.map((c) => c.ref), ['t1']); // other side untouched
+  assert.equal(sideTotal(theirs), 4);
+  // Removing the LAST card empties the side: no thumbs, no Total,
+  // and the photo button goes back to TAKE A PICTURE (length 0).
+  assert.deepEqual(remove(mineAfter, 0), []);
+  assert.equal(remove(mineAfter, 0).length > 0, false);
+});
+ok('removing the only priced card flips the trade to unpriceable', () => {
+  // A side of [priced, unpriced] vs an unpriced side still earns a
+  // verdict on the priced total; remove that side's ONLY priced card
+  // and the gate must refuse a verdict rather than let the unpriced
+  // remainder "match" at $0.00. (The other side must be unpriced too:
+  // any priced card anywhere keeps the trade priceable.)
+  const remove = (cards, idx) => cards.filter((_, i) => i !== idx);
+  const mine = [mkCard('m1', 2.5), mkCard('m2', null)];
+  const theirs = [mkCard('t1', null)];
+  assert.equal(tradeIsUnpriceable(mine, theirs), false);
+  assert.equal(tradeIsUnpriceable(remove(mine, 0), theirs), true);
+  // Removing the unpriced card instead changes nothing about pricing.
+  assert.equal(tradeIsUnpriceable(remove(mine, 1), theirs), false);
+  assert.deepEqual(priceCoverage(remove(mine, 1)), { priced: 1, unpriced: 0 });
+});
+
 console.log('logic: fairness setting — shared verdict predicate');
 ok('percentage mode (default) is the legacy rule', () => {
   // $2.00 vs $2.20: ratio .091 <= .15 -> FAIR

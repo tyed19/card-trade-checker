@@ -743,7 +743,7 @@ export default function Home() {
                 <div className="thumbCol" key={c.id + '-' + i}>
                   <div className="thumb">
                     {c.image && <img src={c.image} alt={c.name} />}
-                    <button aria-label="remove" onClick={() => removeCard(side, i)}>×</button>
+                    <button className="removeBtn" aria-label="Remove this card from the trade" title="Remove from trade" onClick={() => removeCard(side, i)}>×</button>
                     {binderState.kids.length > 0 && (
                       <button className="addBtn" aria-label="add to binder" title="Add to a binder" onClick={() => setBinderPick(c)}><IconPlus size={16} /></button>
                     )}

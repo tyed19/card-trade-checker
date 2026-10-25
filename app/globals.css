@@ -82,9 +82,18 @@ input[type='file'] { display: none; }
 .sideTotal { text-align: center; font-weight: 900; font-size: 19px; color: #ffd94d; margin-top: 10px; }
 .thumb { position: relative; width: 74px; }
 .thumb img { width: 74px; height: 103px; object-fit: cover; border-radius: 8px; border: 3px solid #fff; }
-.thumb button {
-  position: absolute; top: -8px; right: -8px; width: 28px; height: 28px; border-radius: 50%;
-  border: none; background: #e63946; color: #fff; font-size: 17px; font-weight: 900; cursor: pointer;
+/* Per-card remove (trade tiles): a big red × at the TOP-right corner.
+   It used to share the generic `.thumb button` rule with the green +
+   add-to-binder badge, which ALSO set top — and with both top and
+   bottom set, top wins, so the + landed on the same corner and painted
+   over the × whenever kids existed (i.e. always for a real family):
+   remove was invisible and untappable. The two badges now own
+   different corners outright: red × top-right, green + bottom-right,
+   different colors, sizes, and glyphs, so a child can't confuse them. */
+.thumb .removeBtn {
+  position: absolute; top: -8px; right: -8px; width: 40px; height: 40px; border-radius: 50%;
+  border: 2px solid #fff; background: #e63946; color: #fff; font-size: 22px; font-weight: 900;
+  line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 
 .checkWrap { padding: 18px 12px 6px; max-width: 760px; margin: 0 auto; }
@@ -278,7 +287,7 @@ input[type='file'] { display: none; }
 .sideKidBtn.sel { background: #2a75bb; box-shadow: 0 0 0 3px #ffcb05; }
 .pickerBtn { display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-weight: 900; font-size: 15.5px; background: #ffcb05; color: #14213d; border: 3px solid #c79a00; border-radius: 999px; padding: 9px 13px; cursor: pointer; margin-left: 4px; }
 .thumb .addBtn {
-  position: absolute; bottom: -8px; right: -8px; width: 30px; height: 30px; border-radius: 999px;
+  position: absolute; top: auto; bottom: -8px; right: -8px; width: 30px; height: 30px; border-radius: 999px;
   display: flex; align-items: center; justify-content: center;
   background: #14532d; color: #fff; border: 2px solid #2fbf71; font-size: 15px; cursor: pointer; line-height: 1;
 }
