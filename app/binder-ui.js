@@ -510,7 +510,24 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
           <div className={`choiceGrid${choices.length === 1 ? ' one' : ''}`}>
             {choices.map((c, i) => (
               <button key={i} className="choiceBtn" onClick={() => pick(c)}>
-                <img src={c.image} alt={c.name} />
+                {c.image && (
+                  <img
+                    src={c.image}
+                    alt={c.name}
+                    onError={(e) => {
+                      // Same rule as the trade choices: a broken picture
+                      // must never leave an unidentifiable choice.
+                      const img = e.currentTarget;
+                      if (c.imageFallback && !img.dataset.fbTried) {
+                        img.dataset.fbTried = '1';
+                        img.src = c.imageFallback;
+                      } else {
+                        img.style.display = 'none';
+                      }
+                    }}
+                  />
+                )}
+                <span className="choiceName">{c.name}</span>
               </button>
             ))}
           </div>

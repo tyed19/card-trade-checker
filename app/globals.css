@@ -64,6 +64,8 @@ input[type='file'] { display: none; }
 .choiceBtn:active { transform: translateY(3px); }
 .choiceBtn img { width: min(26vw, 150px); border-radius: 10px; display: block; }
 .choiceGrid.one .choiceBtn img { width: min(62vw, 240px); }
+.choiceName { display: block; font-size: clamp(16px, 4.5vw, 20px); font-weight: 900; color: #fff; line-height: 1.3; padding: 8px 8px 10px; }
+.choiceGrid.one .choiceName { font-size: clamp(18px, 5.5vw, 24px); }
 .noneBtn {
   display: inline-flex; align-items: center; justify-content: center; gap: 9px;
   margin-top: 14px; width: 100%; max-width: 340px; padding: 18px 8px; border: none; border-radius: 16px; cursor: pointer;

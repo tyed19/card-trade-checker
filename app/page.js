@@ -727,7 +727,28 @@ export default function Home() {
             <div className={`choiceGrid${s.choices.length === 1 ? ' one' : ''}`}>
               {s.choices.map((c, i) => (
                 <button className="choiceBtn" key={c.id + '-' + i} onClick={() => pickChoice(side, c)}>
-                  {c.image && <img src={c.image} alt={c.name} />}
+                  {c.image && (
+                    <img
+                      src={c.image}
+                      alt={c.name}
+                      onError={(e) => {
+                        // A broken picture must never leave an
+                        // unidentifiable choice: try the fallback art
+                        // once, then drop the img and leave the name.
+                        const img = e.currentTarget;
+                        if (c.imageFallback && !img.dataset.fbTried) {
+                          img.dataset.fbTried = '1';
+                          img.src = c.imageFallback;
+                        } else {
+                          img.style.display = 'none';
+                        }
+                      }}
+                    />
+                  )}
+                  {/* Name is ALWAYS rendered: 1,724 catalog rows carry no
+                      image at all, so an image-only pill can be blank
+                      with nothing for a kid to tap on purpose. */}
+                  <span className="choiceName">{c.name}</span>
                 </button>
               ))}
             </div>
