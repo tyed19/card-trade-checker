@@ -427,6 +427,7 @@ export function SetPage({ kid, setKey, go }) {
 export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
   const [count, setCount] = useState(0);
   const [status, setStatus] = useState('');
+  const [hint, setHint] = useState(null);
   const [busy, setBusy] = useState(false);
   const [choices, setChoices] = useState(null);
   const [last, setLast] = useState(null);
@@ -452,7 +453,7 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
 
   async function onPhotoFile(file) {
     if (!file) return;
-    setBusy(true); setChoices(null); setStatus('');
+    setBusy(true); setChoices(null); setStatus(''); setHint(null);
     playClip('looking', '');
     try {
       const small = await shrinkForUpload(file);
@@ -464,15 +465,18 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
         if (json.stumped) { setStatus('That one stumped me! Skip it for now.'); playClip('stumped', ''); }
         else if (json.error === 'unreadable' || json.error === 'no-card') { setStatus('I couldn\'t read that one — try again!'); playClip('unreadable', ''); }
         else { setStatus('Something went wrong — try again!'); playClip('wrong', ''); }
+        setHint(null);
         return;
       }
       const shown = (json.candidates || []).filter((c) => c.displayable);
       if (!shown.length) {
         if (json.stumped) { setStatus('That one stumped me! Skip it for now.'); playClip('stumped', ''); }
         else { setStatus('I couldn\'t read that one — try again!'); playClip('unreadable', ''); }
+        setHint(json.retakeHint || null);
         return;
       }
       setChoices(shown.slice(0, 3));
+      setHint(null);
       playClip('tap', '');
     } catch {
       setStatus('Something went wrong — try again!');
@@ -487,6 +491,7 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
       setCount((c) => c + 1);
       setLast(card);
       setStatus('');
+      setHint(null);
       playClip('gotIt', '');
     } else {
       setStatus('That card isn\'t in our card book yet — skip it for now.');
@@ -504,6 +509,7 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
         </div>
       )}
       <div className="status" role="status">{status}</div>
+      {hint ? <div className="retakeHint">{hint}</div> : null}
       {choices ? (
         <div className="choices">
           <div className="q">Tap your card!</div>

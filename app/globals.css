@@ -52,6 +52,7 @@ h1.title {
 input[type='file'] { display: none; }
 
 .status { text-align: center; font-size: clamp(17px, 5vw, 22px); min-height: 30px; margin: 12px 4px 4px; font-weight: bold; }
+.retakeHint { text-align: center; font-size: clamp(13px, 3.8vw, 16px); color: #475569; line-height: 1.4; margin: 2px 12px 8px; }
 
 .choices { text-align: center; }
 .choices .q { font-size: clamp(20px, 6vw, 26px); font-weight: 900; margin: 10px 0; }

@@ -51,7 +51,7 @@ export async function POST(req) {
         ocrStages: getStageStats(),
       });
     }
-    const { reading, candidates, pict, zone } = done;
+    const { reading, candidates, pict, zone, retakeHint } = done;
     const { nameGuess, nameGuesses, numberGuess, numberGuesses, attackGuesses, debug } = reading || {};
     // Confidence gate verdict: at least one candidate carries structural
     // evidence (see applyGate in lib/identify.js). When none does, the
@@ -75,6 +75,7 @@ export async function POST(req) {
       },
       candidates,
       zone,
+      retakeHint: retakeHint || null,
       timing: {
         ocrMs: done.ocrMs || 0,
         totalMs: Date.now() - t0,

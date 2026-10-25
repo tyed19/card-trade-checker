@@ -157,7 +157,7 @@ function playClip(key, fallbackText) {
   });
 }
 
-const emptySide = () => ({ cards: [], choices: null, busy: false, status: '' });
+const emptySide = () => ({ cards: [], choices: null, busy: false, status: '', hint: null });
 
 // Shrink big phone photos before upload: full-size images made the
 // server OCR blow its time limit (the live 504s). Card bands are read
@@ -383,7 +383,7 @@ export default function Home() {
     // changes nothing yet, and a failed/stumped photo must not throw
     // away a good valuation. It clears in cardsChanged() the moment
     // a card actually lands on (or leaves) a side.
-    setSide(side, { busy: true, choices: null, status: 'Looking at your card…' });
+    setSide(side, { busy: true, choices: null, status: 'Looking at your card…', hint: null });
     playClip('looking', 'Looking at your card');
     try {
       const upload = await shrinkForUpload(file);
@@ -402,18 +402,18 @@ export default function Home() {
         // Status stays EMPTY here: the choices block renders its own
         // "Tap your card!" heading — setting it here too printed the
         // heading twice (the doubled heading in the user's screenshot).
-        setSide(side, { busy: false, choices, status: '' });
+        setSide(side, { busy: false, choices, status: '', hint: null });
         playClip('tap', 'Tap your card!');
       } else if (json.ok && json.stumped) {
         // The photo read fine (a solid number) but the card book came
         // back empty — don't blame the kid's photo for that.
-        setSide(side, { busy: false, choices: null, status: 'That one stumped me! One more try!' });
+        setSide(side, { busy: false, choices: null, status: 'That one stumped me! One more try!', hint: json.retakeHint || null });
         playClip('stumped', 'That one stumped me! Try again!');
       } else if (json.ok) {
-        setSide(side, { busy: false, choices: null, status: 'I could not read that one. Flat + bright, try again!' });
+        setSide(side, { busy: false, choices: null, status: 'I could not read that one. Flat + bright, try again!', hint: json.retakeHint || null });
         playClip('unreadable', 'I could not read that one. Try again, flat and bright!');
       } else {
-        setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!' });
+        setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!', hint: null });
         playClip('wrong', 'Something went wrong. Try again!');
       }
     } catch {
@@ -426,13 +426,13 @@ export default function Home() {
   function pickChoice(side, cand) {
     const s = sides[side];
     if (!s.choices) return;
-    setSide(side, { cards: [...s.cards, cand], choices: null, status: 'Got it!' });
+    setSide(side, { cards: [...s.cards, cand], choices: null, status: 'Got it!', hint: null });
     cardsChanged(); // append: existing cards/kid assignment stay put
     playClip('gotIt', 'Got it!');
   }
 
   function noneOfThese(side) {
-    setSide(side, { choices: null, status: 'OK! Take the picture again!' });
+    setSide(side, { choices: null, status: 'OK! Take the picture again!', hint: null });
     playClip('takeAgain', 'OK! Take the picture again');
   }
 
@@ -720,6 +720,7 @@ export default function Home() {
             : <><IconCamera size={30} /> TAKE A PICTURE</>}
         </button>
         <div className="status">{s.status}</div>
+        {s.hint ? <div className="retakeHint">{s.hint}</div> : null}
 
         {s.choices && s.choices.length > 0 && (
           <div className="choices">
