@@ -33,6 +33,9 @@ const disp = (list) => list.filter((c) => c.displayable).map((c) => c.id);
   ];
   suppressTiedGroups(list);
   check('bug1 cluster -> zero displayable', disp(list).length, 0);
+  check('bug1 cluster -> top was tied', suppressTiedGroups([
+    cand('sv4pt5-234', 'Charizard ex', 127), cand('sv3-223', 'Charizard ex', 126),
+  ]), true);
 }
 
 // 2. Trustworthy top survives: number-matched card above a tied
@@ -44,6 +47,10 @@ const disp = (list) => list.filter((c) => c.displayable).map((c) => c.id);
   ];
   suppressTiedGroups(list);
   check('evidenced top survives, tied family demoted', disp(list).join(','), 'xy12-11');
+  check('evidenced top -> top was NOT tied', suppressTiedGroups([
+    cand('xy12-11', 'Charizard', 240, { numberMatch: true }),
+    cand('base1-4', 'Charizard', 127),
+  ]), false);
 }
 
 // 3. Clear art lead: same-name pair, 15-point spread, no other
