@@ -27,3 +27,5 @@ data/*
 !data/index-full.scales.json
 !data/manifest.json
 !data/cc-overrides.json
+!data/attacks-en.json
+!data/attack-details-en.jsonl

@@ -24,6 +24,14 @@ check('weak picture (0.72) + number = 1', signalCount(cand('a', 'X', { pictSim: 
 check('picture + 2 attack tokens = 2', signalCount(cand('a', 'X', { pictSim: 0.9, attackTokens: 2 })), 2);
 check('picture + 1 attack token = 1', signalCount(cand('a', 'X', { pictSim: 0.9, attackTokens: 1 })), 1);
 check('picture + strong name = 2', signalCount(cand('a', 'X', { pictSim: 0.9, nameSim: 0.85 })), 2);
+// Meowth decision (2026-10-25): the name bar is 0.6, the codebase's
+// corroboration bar — a 0.67 name beside a full number match is two
+// signals, not a retake; below 0.6 the name earns nothing.
+check('number + name 0.67 = 2 (Meowth)', signalCount(cand('a', 'X', { numberMatch: true, nameSim: 0.67 })), 2);
+check('number + name 0.59 = 1', signalCount(cand('a', 'X', { numberMatch: true, nameSim: 0.59 })), 1);
+check('name 0.67 alone = 1', signalCount(cand('a', 'X', { nameSim: 0.67 })), 1);
+check('number + HP match = 2', signalCount(cand('a', 'X', { numberMatch: true, hpMatch: true })), 2);
+check('HP match alone = 1', signalCount(cand('a', 'X', { hpMatch: true })), 1);
 check('number alone = 1', signalCount(cand('a', 'X', { numberMatch: true })), 1);
 check('nothing = 0', signalCount(cand('a', 'X')), 0);
 

@@ -26,6 +26,14 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'No photo received' }, { status: 400 });
     }
     const buffer = Buffer.from(await file.arrayBuffer());
+    // Two-photo merge: the client sends the first (failed) photo's OCR
+    // summary back with a tilted second capture (see lib/hybrid.js).
+    // Unparseable input is ignored, never fatal.
+    let priorOcr = null;
+    try {
+      const rawPrior = form.get('priorOcr');
+      if (typeof rawPrior === 'string' && rawPrior) priorOcr = JSON.parse(rawPrior);
+    } catch { priorOcr = null; }
     // Hard deadline comfortably inside the platform cap (maxDuration 60):
     // if the pipeline is having a slow day, answer with structured JSON
     // the client can act on instead of dying as a platform 504 page
@@ -36,7 +44,7 @@ export async function POST(req) {
       // Phase 2 hybrid: picture-matching proposes, OCR confirms/rescues
       // (lib/hybrid.js). Falls back to the pure OCR path on its own
       // whenever the picture path is unavailable or has no match.
-      return identifyPhoto(buffer, { deadlineAt: t0 + DEADLINE_MS - 4000 });
+      return identifyPhoto(buffer, { deadlineAt: t0 + DEADLINE_MS - 4000, priorOcr });
     })();
     const timeout = new Promise((resolve) => {
       timer = setTimeout(() => resolve(null), Math.max(1000, DEADLINE_MS - (Date.now() - t0)));
@@ -51,8 +59,8 @@ export async function POST(req) {
         ocrStages: getStageStats(),
       });
     }
-    const { reading, candidates, pict, zone, retakeHint } = done;
-    const { nameGuess, nameGuesses, numberGuess, numberGuesses, attackGuesses, debug } = reading || {};
+    const { reading, candidates, pict, zone, retakeHint, secondPhoto } = done;
+    const { nameGuess, nameGuesses, numberGuess, numberGuesses, attackGuesses, hpGuess, debug } = reading || {};
     // Confidence gate verdict: at least one candidate carries structural
     // evidence (see applyGate in lib/identify.js). When none does, the
     // client shows the retake state and never a card picture.
@@ -72,10 +80,12 @@ export async function POST(req) {
         number: numberGuess ? `${numberGuess.padded}${numberGuess.total ? '/' + numberGuess.total : ''}` : '',
         numberGuesses: numberGuesses || [],
         attackGuesses: attackGuesses || [],
+        hpGuess: hpGuess !== undefined && hpGuess !== null ? hpGuess : null,
       },
       candidates,
       zone,
       retakeHint: retakeHint || null,
+      secondPhoto: secondPhoto === true,
       timing: {
         ocrMs: done.ocrMs || 0,
         totalMs: Date.now() - t0,

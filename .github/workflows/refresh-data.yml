@@ -37,6 +37,12 @@ jobs:
           node scripts/build-catalog.mjs en
           node scripts/build-catalog.mjs ja
 
+      # Local attack/ability-title + HP index (lib/attackindex.js):
+      # resumable via its cache, so nightly runs only fetch new cards.
+      # Runs after the catalog rebuild so new ids are picked up.
+      - name: Rebuild attack index (EN)
+        run: node scripts/build-attack-index.mjs
+
       - name: Embed new/changed cards only (incremental)
         run: node scripts/embed-index.mjs --catalogs en,ja --all --out incr --seed-from full
 
@@ -51,7 +57,8 @@ jobs:
           git config user.email "39977020+tyed19@users.noreply.github.com"
           git add data/catalog-en.json data/catalog-ja.json \
                   data/index-full.bin data/index-full.json data/index-full.scales.json \
-                  data/manifest.json
+                  data/manifest.json \
+                  data/attacks-en.json data/attack-details-en.jsonl
           if git diff --cached --quiet; then
             echo "No data changes."
           else

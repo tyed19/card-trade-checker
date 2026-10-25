@@ -237,6 +237,15 @@ export default function Home() {
   // Per-side scan sequence: a response may only write state for the
   // scan that is still current on that side (see onPhoto).
   const scanSeq = useRef({ mine: 0, theirs: 0 });
+  // Two-photo merge: the last failed scan's OCR summary, sent back
+  // with a tilted second capture so the server can combine both
+  // photos' text evidence (see lib/hybrid.js). Cleared when the kid
+  // rejects the choices (NONE OF THESE) — that evidence pointed at
+  // the wrong cards and must not ride along.
+  const lastOcrRef = useRef({ mine: null, theirs: null });
+  // The hidden file input is shared by normal and second-photo picks:
+  // this flag tells its onChange which kind the next pick is.
+  const secondPhotoPick = useRef({ mine: false, theirs: false });
 
   // ---- Phase 3 state: views, per-side kid assignment, pickers ----
   const binderState = useStoreState();
@@ -370,7 +379,20 @@ export default function Home() {
     fileRefs[side].current && fileRefs[side].current.click();
   }
 
-  async function onPhoto(side, file) {
+  // Second-photo capture: same camera path as the normal button, but
+  // the upload carries the first photo's OCR summary so the server
+  // merges both photos' evidence. Only ever offered after a hard
+  // fail (see the secondPhoto flag on the retake state) — the happy
+  // path never sees this button.
+  async function onSecondPhoto(side) {
+    const shot = await takeNativePhoto();
+    if (shot === 'cancelled') return;
+    if (shot) { onPhoto(side, shot, true); return; }
+    secondPhotoPick.current[side] = true;
+    fileRefs[side].current && fileRefs[side].current.click();
+  }
+
+  async function onPhoto(side, file, withPrior = false) {
     if (!file) return;
     // New scan, new sequence: any response still in flight for this
     // side belongs to an older photo and must never write state again.
@@ -383,15 +405,19 @@ export default function Home() {
     // changes nothing yet, and a failed/stumped photo must not throw
     // away a good valuation. It clears in cardsChanged() the moment
     // a card actually lands on (or leaves) a side.
-    setSide(side, { busy: true, choices: null, status: 'Looking at your card…', hint: null });
+    setSide(side, { busy: true, choices: null, status: 'Looking at your card…', hint: null, secondPhoto: false });
     playClip('looking', 'Looking at your card');
     try {
       const upload = await shrinkForUpload(file);
       const form = new FormData();
       form.append('photo', upload);
+      if (withPrior && lastOcrRef.current[side]) {
+        form.append('priorOcr', JSON.stringify(lastOcrRef.current[side]));
+      }
       const res = await fetch('/api/identify', { method: 'POST', body: form });
       const json = await res.json();
       if (stale()) return;
+      if (json.ok && json.ocr) lastOcrRef.current[side] = json.ocr;
       // Picture choices are shown ONLY for server-gated displayable
       // candidates. A weak guess is never presented as an answer: with
       // no displayable candidate we go to the honest retake state.
@@ -402,23 +428,23 @@ export default function Home() {
         // Status stays EMPTY here: the choices block renders its own
         // "Tap your card!" heading — setting it here too printed the
         // heading twice (the doubled heading in the user's screenshot).
-        setSide(side, { busy: false, choices, status: '', hint: null });
+        setSide(side, { busy: false, choices, status: '', hint: null, secondPhoto: false });
         playClip('tap', 'Tap your card!');
       } else if (json.ok && json.stumped) {
         // The photo read fine (a solid number) but the card book came
         // back empty — don't blame the kid's photo for that.
-        setSide(side, { busy: false, choices: null, status: 'That one stumped me! One more try!', hint: json.retakeHint || null });
+        setSide(side, { busy: false, choices: null, status: 'That one stumped me! One more try!', hint: json.retakeHint || null, secondPhoto: json.secondPhoto === true });
         playClip('stumped', 'That one stumped me! Try again!');
       } else if (json.ok) {
-        setSide(side, { busy: false, choices: null, status: 'I could not read that one. Flat + bright, try again!', hint: json.retakeHint || null });
+        setSide(side, { busy: false, choices: null, status: 'I could not read that one. Flat + bright, try again!', hint: json.retakeHint || null, secondPhoto: json.secondPhoto === true });
         playClip('unreadable', 'I could not read that one. Try again, flat and bright!');
       } else {
-        setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!', hint: null });
+        setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!', hint: null, secondPhoto: false });
         playClip('wrong', 'Something went wrong. Try again!');
       }
     } catch {
       if (stale()) return;
-      setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!' });
+      setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!', secondPhoto: false });
       playClip('wrong', 'Something went wrong. Try again!');
     }
   }
@@ -426,13 +452,16 @@ export default function Home() {
   function pickChoice(side, cand) {
     const s = sides[side];
     if (!s.choices) return;
-    setSide(side, { cards: [...s.cards, cand], choices: null, status: 'Got it!', hint: null });
+    setSide(side, { cards: [...s.cards, cand], choices: null, status: 'Got it!', hint: null, secondPhoto: false });
     cardsChanged(); // append: existing cards/kid assignment stay put
     playClip('gotIt', 'Got it!');
   }
 
   function noneOfThese(side) {
-    setSide(side, { choices: null, status: 'OK! Take the picture again!', hint: null });
+    // The rejected choices came from this photo's evidence — it must
+    // not ride along into a second-photo merge.
+    lastOcrRef.current[side] = null;
+    setSide(side, { choices: null, status: 'OK! Take the picture again!', hint: null, secondPhoto: false });
     playClip('takeAgain', 'OK! Take the picture again');
   }
 
@@ -712,7 +741,7 @@ export default function Home() {
           type="file"
           accept="image/*"
           capture="environment"
-          onChange={(e) => { onPhoto(side, e.target.files && e.target.files[0]); e.target.value = ''; }}
+          onChange={(e) => { const second = secondPhotoPick.current[side]; secondPhotoPick.current[side] = false; onPhoto(side, e.target.files && e.target.files[0], second); e.target.value = ''; }}
         />
         <button className="photoBtn" disabled={s.busy} onClick={() => onPhotoButton(side)}>
           {s.busy ? 'LOOKING…' : s.cards.length
@@ -721,6 +750,11 @@ export default function Home() {
         </button>
         <div className="status">{s.status}</div>
         {s.hint ? <div className="retakeHint">{s.hint}</div> : null}
+        {s.secondPhoto && !s.busy && !(s.choices && s.choices.length) ? (
+          <button className="secondPhotoBtn" onClick={() => onSecondPhoto(side)}>
+            <IconCamera size={26} /> Try a tilted photo
+          </button>
+        ) : null}
 
         {s.choices && s.choices.length > 0 && (
           <div className="choices">
