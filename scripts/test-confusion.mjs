@@ -18,7 +18,7 @@
 // so a data change fails loudly instead of silently untesting).
 import fs from 'node:fs';
 import path from 'node:path';
-import { matchKind, applyTripwire } from '../lib/hybrid.js';
+import { matchKind, applyTripwire, candidateOrder } from '../lib/hybrid.js';
 import { suppressTiedGroups } from '../lib/identify.js';
 import { enforceTwoSignal, signalCount } from '../lib/guards.js';
 
@@ -123,6 +123,46 @@ for (const { name, a, b } of PAIRS) {
   check('sole winner number+HP kept', enforceTwoSignal(w2) === 0 && w2[0].displayable, true);
   const w3 = [mk({ numberMatch: true })];
   check('sole winner number alone = 1 signal, demoted', enforceTwoSignal(w3) === 1 && !w3[0].displayable, true);
+}
+
+// --- final choice ordering: exact art tie falls to name agreement ---
+{
+  // The live JP 050/071 tie: Shining Steelix (nameSim 0) and
+  // Dragonite VSTAR (nameSim 0.2), both displayable, both in the
+  // pool, identical pictSim 0.8172 and score 145. Insertion order
+  // alone crowned Steelix; name agreement must break the tie.
+  const steelix = { id: 'S10a-050', name: 'かがやくハガネール', displayable: true, pictSim: 0.8172, nameSim: 0, score: 145, source: 'catalog' };
+  const dragonite = { id: 'swsh10.5-050', name: 'Dragonite VSTAR', displayable: true, pictSim: 0.8172, nameSim: 0.2, score: 145, source: 'catalog' };
+  const tied = [steelix, dragonite];
+  tied.sort(candidateOrder({ topSim: 0.8419 }, () => true));
+  check('exact art tie: name agreement wins (Dragonite first)', tied[0].id, 'swsh10.5-050');
+  // Art still decides when it differs, regardless of name.
+  const artA = { id: 'a', name: 'A', displayable: true, pictSim: 0.82, nameSim: 0, score: 100, source: 'catalog' };
+  const artB = { id: 'b', name: 'B', displayable: true, pictSim: 0.81, nameSim: 0.9, score: 100, source: 'catalog' };
+  const art = [artB, artA];
+  art.sort(candidateOrder({ topSim: 0.85 }, () => true));
+  check('art difference outranks name', art[0].id, 'a');
+  // Same-name prints share a nameSim, so the tiebreak never
+  // disturbs a same-name rivalry: score decides.
+  const sameA = { id: 'a', name: 'Charizard', displayable: true, pictSim: 0.82, nameSim: 0.5, score: 100, source: 'catalog' };
+  const sameB = { id: 'b', name: 'Charizard', displayable: true, pictSim: 0.82, nameSim: 0.5, score: 110, source: 'catalog' };
+  const same = [sameA, sameB];
+  same.sort(candidateOrder({ topSim: 0.85 }, () => true));
+  check('same-name tie: score decides', same[0].id, 'b');
+  // Weak picture (topSim below the strong-art bar): the name
+  // tiebreak does not apply; score decides, insertion order kept
+  // on a full tie.
+  const weakA = { id: 'a', name: 'A', displayable: true, pictSim: 0.70, nameSim: 0, score: 100, source: 'catalog' };
+  const weakB = { id: 'b', name: 'B', displayable: true, pictSim: 0.70, nameSim: 0.9, score: 100, source: 'catalog' };
+  const weak = [weakA, weakB];
+  weak.sort(candidateOrder({ topSim: 0.70 }, () => true));
+  check('weak picture: score tie keeps insertion order', weak[0].id, 'a');
+  // Displayable still outranks everything.
+  const nonDisp = { id: 'a', name: 'A', displayable: false, pictSim: 0.90, nameSim: 0.9, score: 200, source: 'catalog' };
+  const disp = { id: 'b', name: 'B', displayable: true, pictSim: 0.81, nameSim: 0, score: 100, source: 'catalog' };
+  const mixed = [nonDisp, disp];
+  mixed.sort(candidateOrder({ topSim: 0.85 }, () => true));
+  check('displayable outranks non-displayable', mixed[0].id, 'b');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
