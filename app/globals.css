@@ -111,6 +111,24 @@ input[type='file'] { display: none; }
 .camSteady { position: relative; display: flex; gap: 8px; margin-top: 12px; }
 .camSteady span { width: 12px; height: 12px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
 .camSteady span.on { background: #ffcb05; }
+/* Shown the instant a shot is taken, in place of the video: the video
+   element must never sit stream-less on screen (Android WebView
+   paints its grey play glyph over it). */
+.camUploading { position: relative; color: #fff; font-size: 24px; font-weight: 900; }
+/* Small camera-failure notice: the preview failed and every fallback
+   missed too, so the failure must be NAMED with the way back —
+   never a silent drop to the picker. One line, dismissible. */
+.camNotice {
+  position: sticky; top: 0; z-index: 80; display: flex; gap: 10px; align-items: center;
+  background: #ffcb05; color: #14213d; border-radius: 12px; padding: 10px 12px;
+  font-size: 15px; font-weight: 700; margin-bottom: 12px;
+}
+.camNotice span { flex: 1; }
+.camNotice button {
+  border: none; cursor: pointer; border-radius: 999px; padding: 8px 14px;
+  background: #14213d; color: #fff; font-size: 14px; font-weight: 900; white-space: nowrap;
+}
+.camNotice button.camNoticeX { background: transparent; color: #14213d; padding: 8px; font-size: 18px; }
 
 .choices { text-align: center; }
 .choices .q { font-size: clamp(20px, 6vw, 26px); font-weight: 900; margin: 10px 0; }

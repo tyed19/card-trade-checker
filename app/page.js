@@ -224,6 +224,12 @@ export default function Home() {
   // plugin is strictly a fallback: its ACTION_IMAGE_CAPTURE intent
   // can resolve to Google Lens on some Android phones.
   const [preview, setPreview] = useState(null);
+  // Camera-failure notice: set when the preview AND (in the shell)
+  // the native-plugin fallback both missed, so the failure is named
+  // with the way back instead of silently dropping to the picker.
+  // Shape: { side, second, denied } or null. Cleared on the next
+  // capture attempt.
+  const [camNotice, setCamNotice] = useState(null);
   const entryPath = () => {
     try {
       return captureEntry({ isNative: isNative(), hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) });
@@ -361,7 +367,7 @@ export default function Home() {
     // camera app (or Lens). Native plugin only when the preview
     // can't run; picker is terminal.
     const path = entryPath();
-    if (path === 'preview') { setPreview({ side, second: false }); return; }
+    if (path === 'preview') { setCamNotice(null); setPreview({ side, second: false }); return; }
     if (path === 'native') {
       const shot = await takeNativePhoto();
       if (shot === 'cancelled') return;
@@ -386,10 +392,15 @@ export default function Home() {
   }
 
   // The preview itself failed (no camera, denied permission, no API):
-  // in the shell, retry via the native plugin before giving up to the
-  // picker; in a browser the picker is the only fallback. A plugin
-  // cancel means the kid backed out — never open the picker on top.
-  async function onPreviewAutoFail() {
+  // in the shell, retry via the native plugin before giving up; in a
+  // browser the picker is the only fallback. A plugin cancel means
+  // the kid backed out — never open the picker on top. In the shell,
+  // when the plugin ALSO misses, name the failure with a small
+  // notice (Settings path back + picker button) instead of silently
+  // dropping to the picker — a silent fallback reads as "the app is
+  // broken". The notice is general robustness: a denial is only one
+  // possible cause, and the text says so.
+  async function onPreviewAutoFail(reason) {
     if (!preview) return;
     const { side, second } = preview;
     setPreview(null);
@@ -397,7 +408,17 @@ export default function Home() {
       const shot = await takeNativePhoto();
       if (shot === 'cancelled') return;
       if (shot) { onPhoto(side, shot, second); return; }
+      setCamNotice({ side, second, denied: reason === 'NotAllowedError' || reason === 'SecurityError' });
+      return;
     }
+    if (second) secondPhotoPick.current[side] = true;
+    fileRefs[side].current && fileRefs[side].current.click();
+  }
+
+  function onCamNoticePick() {
+    if (!camNotice) return;
+    const { side, second } = camNotice;
+    setCamNotice(null);
     if (second) secondPhotoPick.current[side] = true;
     fileRefs[side].current && fileRefs[side].current.click();
   }
@@ -409,7 +430,7 @@ export default function Home() {
   // path never sees this button.
   async function onSecondPhoto(side) {
     const path = entryPath();
-    if (path === 'preview') { setPreview({ side, second: true }); return; }
+    if (path === 'preview') { setCamNotice(null); setPreview({ side, second: true }); return; }
     if (path === 'native') {
       const shot = await takeNativePhoto();
       if (shot === 'cancelled') return;
@@ -882,6 +903,15 @@ export default function Home() {
 
   return (
     <main>
+      {camNotice ? (
+        <div className="camNotice" role="status">
+          <span>{camNotice.denied
+            ? 'Camera is blocked — allow Camera in Settings → FairSwap → Camera, or pick a photo instead.'
+            : 'Camera didn\u2019t open — check Settings → FairSwap → Camera, or pick a photo instead.'}</span>
+          <button onClick={onCamNoticePick}>Pick a photo</button>
+          <button className="camNoticeX" onClick={() => setCamNotice(null)} aria-label="Dismiss">✕</button>
+        </div>
+      ) : null}
       <h1 className="title"><IconSwap size={34} /> Card Trade Checker <IconSwap size={34} /></h1>
       <div className="steps">
         <span><IconCamera size={19} /> Take a picture</span><span><IconCards size={19} /> Tap your card</span><span><IconScales size={19} /> Check!</span>

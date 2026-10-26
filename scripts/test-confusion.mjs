@@ -157,6 +157,14 @@ for (const { name, a, b } of PAIRS) {
   const weak = [weakA, weakB];
   weak.sort(candidateOrder({ topSim: 0.70 }, () => true));
   check('weak picture: score tie keeps insertion order', weak[0].id, 'a');
+  // A full number match outranks art similarity: the live Iron
+  // Leaves case, where the SIR (hotter art sim, no number) sorted
+  // ahead of the TEF 025/162 the photo's own "025/162" read named.
+  const sir = { id: 'sv05-203', name: 'Iron Leaves ex', displayable: true, pictSim: 0.83, nameSim: 0.92, score: 129, numberMatch: false, source: 'tcgdex' };
+  const regular = { id: 'sv05-025', name: 'Iron Leaves ex', displayable: true, pictSim: 0.81, nameSim: 0.92, score: 204, numberMatch: true, source: 'tcgdex' };
+  const leaves = [sir, regular];
+  leaves.sort(candidateOrder({ topSim: 0.8296 }, () => true));
+  check('number match outranks art sim (true TEF 025 first)', leaves[0].id, 'sv05-025');
   // Displayable still outranks everything.
   const nonDisp = { id: 'a', name: 'A', displayable: false, pictSim: 0.90, nameSim: 0.9, score: 200, source: 'catalog' };
   const disp = { id: 'b', name: 'B', displayable: true, pictSim: 0.81, nameSim: 0, score: 100, source: 'catalog' };

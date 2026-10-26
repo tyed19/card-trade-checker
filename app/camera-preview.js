@@ -11,9 +11,12 @@
 //     bottom edge — where the collector number lives — must sit
 //     inside the outline. No text wall, no instructions to read.
 //   - Auto-capture when the shot is steady and sharp: samples the
-//     video every ~200ms, and after 3 steady+sharp samples in a row
-//     it snaps the sharpest recent frame on its own. Kid-hand shake
-//     stops producing blurry submissions.
+//     video every ~200ms, and steadiness points accumulate (see
+//     lib/steady.js — a shaky sample dents progress, it never wipes
+//     it) until the goal is reached, when it snaps the sharpest
+//     recent frame on its own. The three dots fill fractionally as
+//     points accumulate, so it is always visible how close the shot
+//     is. Kid-hand shake stops producing blurry submissions.
 //   - A manual shutter for kids who don't want to wait, and a
 //     "photo picker instead" escape that always works.
 //   - A soft shine chip when the frame looks very washed out
@@ -30,11 +33,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { measureShot } from '../lib/shotquality.js';
+import { steadyStep, steadyDotFill, STEADY_GOAL, SHARP_MIN } from '../lib/steady.js';
 import { IconCamera, IconX } from './icons';
 
-const STEADY_NEEDED = 3;
 const SAMPLE_MS = 200;
-const DIFF_MAX = 7; // mean abs frame difference below this = steady
 
 function sampleFrame(video, canvas) {
   const W = 160;
@@ -64,11 +66,17 @@ export default function CameraPreview({ onCapture, onClose, onFallback, onAutoFa
   const streamRef = useRef(null);
   const sampleRef = useRef(null);
   const prevRef = useRef(null);
-  const steadyRef = useRef(0);
+  const progressRef = useRef(0);
   const bestRef = useRef(null); // sharpest recent full-res canvas
   const doneRef = useRef(false);
   const [shiny, setShiny] = useState(false);
-  const [steadyCount, setSteadyCount] = useState(0);
+  const [steadyProgress, setSteadyProgress] = useState(0);
+  // Set the instant a shot is taken, BEFORE any async work: the video
+  // element is swapped for an uploading state synchronously, so a
+  // stream-less video can never sit on screen — on Android WebView
+  // that paints its grey play glyph over the frozen frame, which
+  // flashed at the capture→upload transition.
+  const [captured, setCaptured] = useState(false);
 
   useEffect(() => {
     let timer = null;
@@ -102,32 +110,35 @@ export default function CameraPreview({ onCapture, onClose, onFallback, onAutoFa
             setShiny(m.glareFrac >= 0.25);
             const diff = frameDiff(prevRef.current, sample);
             prevRef.current = sample;
-            const good = diff < DIFF_MAX && m.sharpness >= 400;
-            steadyRef.current = good ? steadyRef.current + 1 : 0;
-            setSteadyCount(steadyRef.current);
+            progressRef.current = steadyStep(progressRef.current, { diff, sharpness: m.sharpness });
+            setSteadyProgress(progressRef.current);
             // Keep the sharpest recent full-res frame for auto-capture.
-            if (m.sharpness >= 400) {
+            if (m.sharpness >= SHARP_MIN) {
               const full = bestRef.current || (bestRef.current = document.createElement('canvas'));
               full.width = v.videoWidth;
               full.height = v.videoHeight;
               full.getContext('2d').drawImage(v, 0, 0);
             }
-            if (steadyRef.current >= STEADY_NEEDED) {
+            if (progressRef.current >= STEADY_GOAL) {
               doneRef.current = true;
               captureFromBest();
             }
           } catch { /* a bad sample never breaks the preview */ }
         }, SAMPLE_MS);
-      } catch {
+      } catch (err) {
         // No camera / denied / no API: never strand the kid — the
         // parent retries via the native plugin in the shell, else
-        // opens the file picker.
-        if (!cancelled) (onAutoFail || onFallback)();
+        // opens the file picker. The failure reason rides along so
+        // the parent can name a denial (Settings path back) instead
+        // of failing silently.
+        if (!cancelled) (onAutoFail || onFallback)(err && err.name ? err.name : 'error');
       }
     })();
     return () => {
       cancelled = true;
       if (timer) clearInterval(timer);
+      const v = videoRef.current;
+      if (v) v.srcObject = null;
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -145,14 +156,26 @@ export default function CameraPreview({ onCapture, onClose, onFallback, onAutoFa
   async function captureFromBest() {
     const v = videoRef.current;
     const best = bestRef.current;
-    let file = null;
-    if (best && best.width) file = await canvasToFile(best);
-    if (!file && v && v.videoWidth) {
-      const c = document.createElement('canvas');
-      c.width = v.videoWidth; c.height = v.videoHeight;
-      c.getContext('2d').drawImage(v, 0, 0);
-      file = await canvasToFile(c);
+    // Grab the frame synchronously first: once the stream stops the
+    // live video is gone, so the canvas must already hold the shot.
+    let canvas = null;
+    if (best && best.width) canvas = best;
+    else if (v && v.videoWidth) {
+      canvas = document.createElement('canvas');
+      canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+      canvas.getContext('2d').drawImage(v, 0, 0);
     }
+    // Swap the video for the uploading state NOW, before the async
+    // blob conversion — a stream-less <video> left mounted is what
+    // flashes Android WebView's grey play glyph.
+    setCaptured(true);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (v) v.srcObject = null;
+    if (!canvas) { onFallback(); return; }
+    const file = await canvasToFile(canvas);
     if (file) onCapture(file);
     else onFallback();
   }
@@ -161,6 +184,14 @@ export default function CameraPreview({ onCapture, onClose, onFallback, onAutoFa
     if (doneRef.current) return;
     doneRef.current = true;
     await captureFromBest();
+  }
+
+  if (captured) {
+    return (
+      <div className="camPreview">
+        <div className="camUploading">Sending…</div>
+      </div>
+    );
   }
 
   return (
@@ -181,9 +212,15 @@ export default function CameraPreview({ onCapture, onClose, onFallback, onAutoFa
       </div>
       <button className="camPicker" onClick={onFallback}>Use photo picker instead</button>
       <div className="camSteady" aria-hidden="true">
-        {[0, 1, 2].map((i) => (
-          <span key={i} className={steadyCount > i ? 'on' : ''} />
-        ))}
+        {[0, 1, 2].map((i) => {
+          const fill = steadyDotFill(steadyProgress, i);
+          return (
+            <span
+              key={i}
+              style={fill > 0 ? { background: `linear-gradient(to top, #ffcb05 ${fill * 100}%, rgba(255, 255, 255, 0.35) ${fill * 100}%)` } : undefined}
+            />
+          );
+        })}
       </div>
     </div>
   );
