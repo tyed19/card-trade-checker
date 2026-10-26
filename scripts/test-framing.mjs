@@ -1,7 +1,7 @@
 // Fixtures for the preview firing gate's framing assessment +
 // guidance chip (lib/framing.js) and the pixel-level box detector it
 // runs on (lib/capture.js analyzeCardPixels).
-import { assessFraming, luminanceContrast, guidanceFor, coverOutlineRect } from '../lib/framing.js';
+import { assessFraming, luminanceContrast, guidanceFor, coverOutlineRect, coverBoxDisplayRect } from '../lib/framing.js';
 import { analyzeCardPixels } from '../lib/capture.js';
 
 let pass = 0, fail = 0;
@@ -77,11 +77,23 @@ const outline = { l: 0.4, t: 0.24, w: 0.2, h: 0.5 }; // outline rect for a lands
 check('outline: box matching the outline -> framed', (() => { const r = assessFraming({ l: 0.4, t: 0.24, w: 0.2, h: 0.5, mode: 'full' }, goodLum, outline); return r.framed && r.reason === null; })());
 check('outline: box half the outline area -> closer', (() => { const r = assessFraming({ l: 0.45, t: 0.3, w: 0.1, h: 0.25, mode: 'full' }, goodLum, outline); return !r.framed && r.reason === 'closer'; })());
 check('outline: box barely overlapping the outline -> corners', (() => { const r = assessFraming({ l: 0.0, t: 0.0, w: 0.2, h: 0.5, mode: 'full' }, goodLum, outline); return !r.framed && r.reason === 'corners'; })());
-check('outline: box much bigger than the outline -> corners', (() => { const r = assessFraming({ l: 0.1, t: 0.05, w: 0.8, h: 0.9, mode: 'full' }, goodLum, outline); return !r.framed && r.reason === 'corners'; })());
+check('outline: box much bigger than the outline -> align, NOT corners (fully visible, just misaligned)', (() => { const r = assessFraming({ l: 0.1, t: 0.05, w: 0.8, h: 0.9, mode: 'full' }, goodLum, outline); return !r.framed && r.reason === 'align'; })());
 check('outline: weak background contrast still -> background', (() => { const r = assessFraming({ l: 0.4, t: 0.24, w: 0.2, h: 0.5, mode: 'full' }, { edge: 120, outside: 132 }, outline); return !r.framed && r.reason === 'background'; })());
 check('outline: missing box -> unknown, NEVER corners', (() => { const r = assessFraming(null, goodLum, outline); return !r.framed && r.reason === 'unknown'; })());
 check('outline: rows-mode strip matching vertically -> unknown, not corners', (() => { const r = assessFraming({ l: 0, t: 0.24, w: 1, h: 0.5, mode: 'rows' }, goodLum, outline); return !r.framed && r.reason === 'unknown'; })());
 check('outline: rows-mode strip much shorter than the outline -> closer', (() => { const r = assessFraming({ l: 0, t: 0.3, w: 1, h: 0.2, mode: 'rows' }, goodLum, outline); return !r.framed && r.reason === 'closer'; })());
+// --- REGRESSION (zone scan, iPhone, 2026-10-25): a card riding
+// high in the guide is fully visible — all four corners shown —
+// yet the old mapping called it 'corners' (low outline overlap
+// with a big-ish box) and the guide-anchored number zone landed on
+// the table below the card. 'corners' is now reserved for a box
+// actually touching the frame edge; every fully-visible miss is
+// the alignment hint.
+check('outline: card high in the guide -> align, NEVER corners', (() => { const r = assessFraming({ l: 0.4, t: 0.05, w: 0.2, h: 0.5, mode: 'full' }, goodLum, outline); return !r.framed && r.reason === 'align'; })());
+check('outline: box touching the frame edge -> corners (actually cut off)', (() => { const r = assessFraming({ l: 0.0, t: 0.24, w: 0.2, h: 0.5, mode: 'full' }, goodLum, outline); return !r.framed && r.reason === 'corners'; })());
+check('outline: rows strip overflowing the outline vertically -> align', (() => { const r = assessFraming({ l: 0, t: 0.1, w: 1, h: 0.5, mode: 'rows' }, goodLum, outline); return !r.framed && r.reason === 'align'; })());
+check('outline: rows strip touching the frame edge vertically -> corners', (() => { const r = assessFraming({ l: 0, t: 0.0, w: 1, h: 0.5, mode: 'rows' }, goodLum, outline); return !r.framed && r.reason === 'corners'; })());
+check('align chip', guidanceFor({ framing: { framed: false, reason: 'align' }, glareFrac: 0, lastGood: false, ...settled }) === 'Center the card in the outline');
 check('unknown reason produces NO chip (steady phone, fallback hold governs)', guidanceFor({ framing: { framed: false, reason: 'unknown' }, glareFrac: 0, lastGood: true, ...settled }) === null);
 check('unknown reason + moving phone -> Hold steady, never corners', guidanceFor({ framing: { framed: false, reason: 'unknown' }, glareFrac: 0, lastGood: false, ...settled }) === 'Hold steady');
 
@@ -93,6 +105,24 @@ const cover = coverOutlineRect({
   videoW: 1920, videoH: 1080,
 });
 check('cover transform: outline maps to the central video slice (l~0.40, w~0.20, h~0.50)', Math.abs(cover.l - 0.40) < 0.02 && Math.abs(cover.w - 0.20) < 0.02 && Math.abs(cover.h - 0.50) < 0.02 && Math.abs(cover.t - 0.24) < 0.02);
+
+// --- coverBoxDisplayRect: inverse cover transform, box fractions
+// -> display pixels relative to the video element's top-left. The
+// same landscape-stream-in-portrait-container geometry as above:
+// a box equal to the outline fractions lands on the outline's
+// display rect, and a box riding high lands high.
+const boxRect = coverBoxDisplayRect({
+  videoRect: { left: 0, top: 0, width: 390, height: 844 },
+  videoW: 1920, videoH: 1080,
+  box: { l: 0.4, t: 0.24, w: 0.2, h: 0.5 },
+});
+check('box display rect: outline fractions land on the outline pixels', Math.abs(boxRect.left - 43) < 5 && Math.abs(boxRect.top - 200) < 5 && Math.abs(boxRect.width - 304) < 5 && Math.abs(boxRect.height - 425) < 5);
+const highBoxRect = coverBoxDisplayRect({
+  videoRect: { left: 0, top: 0, width: 390, height: 844 },
+  videoW: 1920, videoH: 1080,
+  box: { l: 0.4, t: 0.05, w: 0.2, h: 0.5 },
+});
+check('box display rect: high card lands high, not on the guide bottom', Math.abs(highBoxRect.top - 42) < 5 && Math.abs(highBoxRect.top + highBoxRect.height - 464) < 5);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -24,10 +24,27 @@
 //     and dishonest). When the gate blocks firing, a single short
 //     guidance chip names the most-blocking reason, Chase
 //     check-deposit style ("Move closer", "Show all four corners",
-//     "Needs a darker background", "Tilt a little", "Hold steady")
-//     — blocked firing always explains itself, and a missing box
-//     never produces a 'corners' chip: the fallback hold below is
-//     what fires instead.
+//     "Center the card in the outline", "Needs a darker
+//     background", "Tilt a little", "Hold steady") — blocked
+//     firing always explains itself, and a missing box never
+//     produces a 'corners' chip: the fallback hold below is what
+//     fires instead. 'corners' is reserved for a card actually cut
+//     off by the frame edge; a fully visible card that merely
+//     fails to cover the outline gets the alignment hint.
+//   - Zonal outlines (see lib/zones.js) anchored to the DETECTED
+//     card box in display pixels — never to the fixed guide, whose
+//     bottom zone landed on the table whenever the card rode high
+//     in the outline. No box -> no zones rendered at all.
+//   - Focus: continuous autofocus is requested up front
+//     (focusMode 'continuous' in constraints + reaffirmed on the
+//     track), and tapping the preview shows a native-style focus
+//     reticle at the tap point while attempting a refocus cycle
+//     (continuous -> manual -> continuous). Honest limit: webviews
+//     expose no true focus-point API, so on iOS WKWebView the
+//     platform may ignore focusMode entirely — the tap then only
+//     reaffirms continuous AF, and the reticle still confirms the
+//     tap. Either way the preview, gate, chips, zones, and firing
+//     rule are untouched by a focus attempt.
 //   - Fallback hold: a box-detector miss must never permanently
 //     veto auto-capture. A long unbroken run of firing-grade
 //     frames (~2.6s) fires even without a framed box.
@@ -55,8 +72,8 @@ import { useEffect, useRef, useState } from 'react';
 import { measureShot } from '../lib/shotquality.js';
 import { steadyStep, steadyDotFill, SHARP_MIN, isFireSample, goodStreakStep, shouldFire, shouldFireFallback, FIRE_MIN_MS } from '../lib/steady.js';
 import { analyzeCardPixels } from '../lib/capture.js';
-import { assessFraming, luminanceContrast, guidanceFor, coverOutlineRect } from '../lib/framing.js';
-import { ZONES, assessZoneQuality, deriveZoneDisplay } from '../lib/zones.js';
+import { assessFraming, luminanceContrast, guidanceFor, coverOutlineRect, coverBoxDisplayRect } from '../lib/framing.js';
+import { ZONES, assessZoneQuality, deriveZoneDisplay, zoneDisplayRects } from '../lib/zones.js';
 import { IconCamera, IconX } from './icons';
 
 const SAMPLE_MS = 200;
@@ -101,6 +118,18 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
   // card box exists to measure inside. Display-only — it never
   // fires, never locks, never touches the gate.
   const [zoneQuality, setZoneQuality] = useState(null);
+  // Zone anchor: the detected card box + the guide outline, both in
+  // display pixels relative to the video element (which fills the
+  // preview container exactly, so these double as container
+  // coordinates). Null until a box exists: zones then hide rather
+  // than sit in the wrong place — guide-anchored zones put the
+  // number zone on the table whenever the card rode high in the
+  // guide (Iron Leaves, iPhone, 2026-10-25).
+  const [zoneAnchor, setZoneAnchor] = useState(null);
+  // Tap-to-focus reticle: { x, y, id } in preview-container pixels,
+  // or null. Rendered only; the refocus attempt lives in focusAt.
+  const [focusRing, setFocusRing] = useState(null);
+  const focusTimerRef = useRef(null);
   // Set the instant a shot is taken, BEFORE any async work: the video
   // element is swapped for an uploading state synchronously, so a
   // stream-less video can never sit on screen — on Android WebView
@@ -117,7 +146,10 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
           throw new Error('no-camera-api');
         }
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+          // focusMode 'continuous' is requested up front; platforms
+          // that don't support it ignore the unknown constraint,
+          // and the track-level reaffirm below is equally guarded.
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, focusMode: 'continuous' },
           audio: false,
         });
         if (cancelled) {
@@ -130,6 +162,13 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
           video.srcObject = stream;
           await video.play().catch(() => {});
         }
+        try {
+          const track = stream.getVideoTracks()[0];
+          if (track && typeof track.applyConstraints === 'function') {
+            const p = track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+          }
+        } catch { /* continuous AF stays a best-effort request */ }
         startRef.current = Date.now();
         timer = setInterval(() => {
           const v = videoRef.current;
@@ -164,16 +203,33 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
             setZoneQuality(assessZoneQuality(sample.data, sample.width, sample.height, box));
             const lum = box ? luminanceContrast(sample.data, sample.width, sample.height, box) : null;
             let outline = null;
+            let anchor = null;
             try {
+              const vRect = v.getBoundingClientRect();
               const oEl = outlineRef.current;
+              let guideDisplay = null;
               if (oEl && v.videoWidth && v.videoHeight) {
+                const oRect = oEl.getBoundingClientRect();
                 outline = coverOutlineRect({
-                  videoRect: v.getBoundingClientRect(),
-                  outlineRect: oEl.getBoundingClientRect(),
+                  videoRect: vRect,
+                  outlineRect: oRect,
                   videoW: v.videoWidth, videoH: v.videoHeight,
                 });
+                guideDisplay = { left: oRect.left - vRect.left, top: oRect.top - vRect.top, width: oRect.width, height: oRect.height };
               }
-            } catch { /* outline stays null -> legacy framing */ }
+              // Zone anchor: the detected box mapped to display
+              // pixels (rows-mode boxes keep their mode so the
+              // zone helper can fall back to the guide for their
+              // unknown horizontal span). No box -> null -> zones
+              // hidden, never drawn in the wrong place.
+              if (box) {
+                anchor = {
+                  box: { ...coverBoxDisplayRect({ videoRect: vRect, videoW: v.videoWidth, videoH: v.videoHeight, box }), mode: box.mode },
+                  guide: guideDisplay,
+                };
+              }
+            } catch { /* outline stays null -> legacy framing; anchor stays null -> zones hidden */ }
+            setZoneAnchor(anchor);
             const framing = assessFraming(box, lum, outline);
             const elapsedMs = Date.now() - startRef.current;
             setGuidance(guidanceFor({ framing, glareFrac: m.glareFrac, lastGood: fireSample, elapsedMs, minMs: FIRE_MIN_MS }));
@@ -203,6 +259,7 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
     return () => {
       cancelled = true;
       if (timer) clearInterval(timer);
+      if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
       const v = videoRef.current;
       if (v) v.srcObject = null;
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
@@ -252,6 +309,35 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
     await captureFromBest();
   }
 
+  // Tap-to-focus: show a native-style reticle at the tap point and
+  // attempt a refocus cycle on the video track. Webviews expose no
+  // true focus-point API, so this is honest about its limits: the
+  // toggle (continuous -> manual -> continuous) is attempted where
+  // the platform honors focusMode, and where it doesn't, the tap
+  // reaffirms continuous AF at best. The reticle always confirms
+  // the tap, and the attempt never touches the gate, chips, zones,
+  // or firing rule — it only nudges the camera's focus state.
+  async function focusAt(e) {
+    const v = videoRef.current;
+    if (!v) return;
+    const rect = v.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+    setFocusRing({ x, y, id: Date.now() });
+    focusTimerRef.current = setTimeout(() => setFocusRing(null), 1600);
+    try {
+      const track = streamRef.current ? streamRef.current.getVideoTracks()[0] : null;
+      if (!track || typeof track.applyConstraints !== 'function') return;
+      try {
+        await track.applyConstraints({ advanced: [{ focusMode: 'manual' }] });
+        await new Promise((r) => setTimeout(r, 300));
+        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+      } catch {
+        try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch { /* platform honors no focus API */ }
+      }
+    } catch { /* a focus attempt never breaks the preview */ }
+  }
+
   if (captured) {
     return (
       <div className="camPreview">
@@ -264,25 +350,39 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
   // looks readable, sparkling = still needs work) + percent of
   // zones locked. Computed every render from the latest sample.
   const zoneDisplay = deriveZoneDisplay({ progress: locked || null, quality: zoneQuality });
+  // Zone geometry: pixel rects anchored to the DETECTED card box,
+  // not the fixed guide — null when no box exists, in which case
+  // no zones render at all (a zone in the wrong place is worse
+  // than no zone). The corner dots stay on the guide: they are the
+  // target the kid frames into, not annotations on the card.
+  const zoneRects = zoneAnchor ? zoneDisplayRects(zoneAnchor) : null;
 
   return (
     <div className="camPreview">
-      <video ref={videoRef} playsInline muted autoPlay className="camVideo" />
+      <video ref={videoRef} playsInline muted autoPlay className="camVideo" onClick={focusAt} />
       <div className="camPercent" aria-hidden="true">{zoneDisplay.percent}%</div>
       <div ref={outlineRef} className={`camOutline${stage === 'number' ? ' numberStage' : ''}`}>
         <span className="camCornerDot camDotBL" />
         <span className="camCornerDot camDotBR" />
-        {ZONES.map((z) => {
-          const dz = zoneDisplay.zones[z.key];
-          return (
-            <span
-              key={z.key}
-              className={`camZone camZone${z.key} ${dz.state}${dz.pulse ? ' camZonePulse' : ''}`}
-              style={{ top: `${z.top * 100}%`, height: `${z.height * 100}%` }}
-            />
-          );
-        })}
       </div>
+      {zoneRects ? (
+        <div className="camZoneLayer" aria-hidden="true">
+          {ZONES.map((z) => {
+            const dz = zoneDisplay.zones[z.key];
+            const r = zoneRects[z.key];
+            return (
+              <span
+                key={z.key}
+                className={`camZone camZone${z.key} ${dz.state}${dz.pulse ? ' camZonePulse' : ''}`}
+                style={{ left: r.left, top: r.top, width: r.width, height: r.height }}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+      {focusRing ? (
+        <span key={focusRing.id} className="camFocusRing" aria-hidden="true" style={{ left: focusRing.x, top: focusRing.y }} />
+      ) : null}
       {guidance ? <div className="camChip">{guidance}</div> : null}
       <div className="camBar">
         <button className="camShutter" onClick={snapNow} aria-label="Take a picture">

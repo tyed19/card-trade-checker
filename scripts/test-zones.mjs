@@ -1,7 +1,7 @@
 // Fixtures for the live zonal scan (lib/zones.js): zone geometry,
 // per-zone live quality classification, and the server-locked
 // display derivation (gold only for server-confirmed signals).
-import { ZONES, assessZoneQuality, deriveZoneDisplay } from '../lib/zones.js';
+import { ZONES, assessZoneQuality, deriveZoneDisplay, zoneDisplayRects } from '../lib/zones.js';
 
 let pass = 0, fail = 0;
 function check(name, cond) {
@@ -68,6 +68,34 @@ const brightChecker = (x, y) => ((x + y) % 2 === 0 ? 255 : 210); // sharp but wa
   check('tiny box means no quality', assessZoneQuality(data, w, h, { l: 0.5, t: 0.5, w: 0.01, h: 0.01 }) === null);
 }
 
+// --- zone display rects: anchored to the DETECTED box, never the
+// guide. Regression (iPhone, 2026-10-25): a card riding high in
+// the guide put the guide-anchored number zone on the table below
+// the card. Box-anchored zones must end at the card's own bottom.
+{
+  // Card high in the guide: box top 42, height 422 (bottom 464);
+  // guide top 200, height 425 (bottom 625, on the table).
+  const box = { left: 45, top: 42, width: 300, height: 422, mode: 'full' };
+  const guide = { left: 43, top: 200, width: 304, height: 425 };
+  const r = zoneDisplayRects({ box, guide });
+  check('number zone ends at the card bottom, not the guide bottom', Math.abs(r.number.top + r.number.height - 464) < 1 && r.number.top < 625);
+  check('name zone starts at the card top', Math.abs(r.name.top - 42) < 1);
+  check('art zone sits inside the card', r.art.top >= 42 && r.art.top + r.art.height <= 464);
+  check('zones keep the 3%/94% horizontal inset', Math.abs(r.name.left - (45 + 0.03 * 300)) < 1 && Math.abs(r.name.width - 0.94 * 300) < 1);
+}
+{
+  check('no box means no zone rects (hidden, never misplaced)', zoneDisplayRects({ box: null, guide: { left: 0, top: 0, width: 100, height: 100 } }) === null);
+}
+{
+  // Rows-mode: vertical from the box, horizontal from the guide
+  // (rows strips carry no horizontal information).
+  const rows = { left: 0, top: 42, width: 1000, height: 422, mode: 'rows' };
+  const guide = { left: 43, top: 200, width: 304, height: 425 };
+  const r = zoneDisplayRects({ box: rows, guide });
+  check('rows zones: vertical from box, horizontal from guide', Math.abs(r.number.top + r.number.height - 464) < 1 && Math.abs(r.number.left - (43 + 0.03 * 304)) < 1);
+  check('rows without a guide means no zone rects', zoneDisplayRects({ box: rows, guide: null }) === null);
+}
+
 // --- display derivation: gold ONLY for server-confirmed signals ---
 {
   const d = deriveZoneDisplay({ progress: null, quality: null });
@@ -76,7 +104,7 @@ const brightChecker = (x, y) => ((x + y) % 2 === 0 ? 255 : 210); // sharp but wa
 }
 {
   const d = deriveZoneDisplay({ progress: null, quality: { name: { ready: true }, art: { ready: true }, number: { ready: false } } });
-  check('live-ready zones are bright, not gold, percent stays 0', d.zones.name.state === 'ready' && d.zones.art.state === 'ready' && d.zones.number.state === 'needs' && d.percent === 0);
+  check('live-ready zones are bright, not gold, percent climbs partway (2 ready = 33)', d.zones.name.state === 'ready' && d.zones.art.state === 'ready' && d.zones.number.state === 'needs' && d.percent === 33);
 }
 {
   // Iron Leaves ex shape: name + picture banked, number missing.
