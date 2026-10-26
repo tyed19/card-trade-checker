@@ -71,7 +71,12 @@ jobs:
   ios:
     name: iOS — unsigned archive compile proof
     if: inputs.platform == 'ios' || inputs.platform == 'both'
-    runs-on: macos-14
+    # macos-15 + explicit Xcode 26 selection, mirroring ios-testflight:
+    # the swift-pm 8.5.3 xcframework is built with Swift 6, and the
+    # macos-14 default Xcode 15.4 cannot consume it (SharePlugin
+    # failed to see CAPPluginCall's Swift accessors under 15.4).
+    # macos-14 also retires 2026-11-02.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -82,6 +87,16 @@ jobs:
         run: |
           npm ci
           npx cap sync ios
+      - name: Select Xcode 26
+        run: |
+          XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -z "$XCODE_APP" ]; then
+            echo "::error::No Xcode 26 found on this runner image."
+            exit 1
+          fi
+          echo "Using $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
       - name: Archive without signing (compile proof)
         working-directory: ios/App
         run: |
