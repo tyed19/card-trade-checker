@@ -56,6 +56,7 @@ import { measureShot } from '../lib/shotquality.js';
 import { steadyStep, steadyDotFill, SHARP_MIN, isFireSample, goodStreakStep, shouldFire, shouldFireFallback, FIRE_MIN_MS } from '../lib/steady.js';
 import { analyzeCardPixels } from '../lib/capture.js';
 import { assessFraming, luminanceContrast, guidanceFor, coverOutlineRect } from '../lib/framing.js';
+import { ZONES, assessZoneQuality, deriveZoneDisplay } from '../lib/zones.js';
 import { IconCamera, IconX } from './icons';
 
 const SAMPLE_MS = 200;
@@ -83,7 +84,7 @@ function frameDiff(a, b) {
   return sum / (n * 3);
 }
 
-export default function CameraPreview({ stage, onCapture, onClose, onFallback, onAutoFail }) {
+export default function CameraPreview({ stage, locked, onCapture, onClose, onFallback, onAutoFail }) {
   const videoRef = useRef(null);
   const outlineRef = useRef(null);
   const streamRef = useRef(null);
@@ -96,6 +97,10 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
   const doneRef = useRef(false);
   const [guidance, setGuidance] = useState(null);
   const [steadyProgress, setSteadyProgress] = useState(0);
+  // Live zonal quality, refreshed with every sample: null until a
+  // card box exists to measure inside. Display-only — it never
+  // fires, never locks, never touches the gate.
+  const [zoneQuality, setZoneQuality] = useState(null);
   // Set the instant a shot is taken, BEFORE any async work: the video
   // element is swapped for an uploading state synchronously, so a
   // stream-less video can never sit on screen — on Android WebView
@@ -153,6 +158,10 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
             // unavailable, assessFraming falls back to the legacy
             // frame-relative path.
             const box = analyzeCardPixels(sample.data, sample.width, sample.height, v.videoWidth, v.videoHeight);
+            // Zonal live quality, measured inside the detected box:
+            // which zones look readable right now (never a lock —
+            // locks come only from the server, via `locked`).
+            setZoneQuality(assessZoneQuality(sample.data, sample.width, sample.height, box));
             const lum = box ? luminanceContrast(sample.data, sample.width, sample.height, box) : null;
             let outline = null;
             try {
@@ -251,12 +260,28 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
     );
   }
 
+  // Zonal display: server locks (gold) + live quality (bright =
+  // looks readable, sparkling = still needs work) + percent of
+  // zones locked. Computed every render from the latest sample.
+  const zoneDisplay = deriveZoneDisplay({ progress: locked || null, quality: zoneQuality });
+
   return (
     <div className="camPreview">
       <video ref={videoRef} playsInline muted autoPlay className="camVideo" />
+      <div className="camPercent" aria-hidden="true">{zoneDisplay.percent}%</div>
       <div ref={outlineRef} className={`camOutline${stage === 'number' ? ' numberStage' : ''}`}>
         <span className="camCornerDot camDotBL" />
         <span className="camCornerDot camDotBR" />
+        {ZONES.map((z) => {
+          const dz = zoneDisplay.zones[z.key];
+          return (
+            <span
+              key={z.key}
+              className={`camZone camZone${z.key} ${dz.state}${dz.pulse ? ' camZonePulse' : ''}`}
+              style={{ top: `${z.top * 100}%`, height: `${z.height * 100}%` }}
+            />
+          );
+        })}
       </div>
       {guidance ? <div className="camChip">{guidance}</div> : null}
       <div className="camBar">

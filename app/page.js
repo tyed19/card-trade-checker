@@ -456,7 +456,7 @@ export default function Home() {
   async function onProgressPhoto(side) {
     const stage = (sides[side].progress && sides[side].progress.missing) || null;
     const path = entryPath();
-    if (path === 'preview') { setPreview({ side, second: true, stage }); return; }
+    if (path === 'preview') { setPreview({ side, second: true, stage, locked: sides[side].progress }); return; }
     if (path === 'native') {
       const shot = await takeNativePhoto();
       if (shot === 'cancelled') return;
@@ -1213,6 +1213,7 @@ export default function Home() {
       {preview ? (
         <CameraPreview
           stage={preview.stage || null}
+          locked={preview.locked || null}
           onCapture={onPreviewCapture}
           onClose={() => setPreview(null)}
           onFallback={onPreviewFallback}

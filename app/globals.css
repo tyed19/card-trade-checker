@@ -142,6 +142,40 @@ input[type='file'] { display: none; }
   50% { transform: scale(1.35); }
 }
 
+/* Live zonal scan: outlines on the card guide itself, one per piece
+   the app needs (name strip, art, number corner). States are honest
+   by construction: `needs` sparkles (live quality says not readable
+   yet), `ready` is a steady bright outline (looks readable live),
+   `locked` is solid gold — and locked is set ONLY from the server's
+   progress summary, never from live quality. Percent counts locks
+   only. The pulse marks the missing stage's zone while unlocked. */
+.camPercent {
+  position: relative; margin-bottom: 10px; color: #ffcb05;
+  font-size: 20px; font-weight: 900; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+.camZone {
+  position: absolute; left: 3%; width: 94%; border-radius: 10px;
+  pointer-events: none;
+}
+.camZone.needs {
+  border: 3px dashed rgba(255, 203, 5, 0.9);
+  animation: camZoneSparkle 1.2s ease-in-out infinite;
+}
+.camZone.ready { border: 3px solid rgba(255, 203, 5, 0.95); }
+.camZone.locked {
+  border: 4px solid #ffcb05; background: rgba(255, 203, 5, 0.14);
+  box-shadow: 0 0 12px rgba(255, 203, 5, 0.55);
+}
+.camZonePulse { animation: camZonePulse 1s ease-in-out infinite; }
+@keyframes camZoneSparkle {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@keyframes camZonePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
 /* Progressive capture ring on the trade screen: three dots for
    picture, name, number — gold is banked, hollow is still missing.
    The button reuses the second-photo style (same big tap target,
