@@ -10,13 +10,18 @@
 //     card's aspect) and two dots on the bottom edge: the whole
 //     bottom edge — where the collector number lives — must sit
 //     inside the outline. No text wall, no instructions to read.
-//   - Auto-capture when the shot is steady and sharp: samples the
-//     video every ~200ms, and steadiness points accumulate (see
-//     lib/steady.js — a shaky sample dents progress, it never wipes
-//     it) until the goal is reached, when it snaps the sharpest
-//     recent frame on its own. The three dots fill fractionally as
-//     points accumulate, so it is always visible how close the shot
-//     is. Kid-hand shake stops producing blurry submissions.
+//   - Auto-capture when the shot is steady, sharp, AND well-framed:
+//     samples the video every ~200ms. The three dots fill
+//     fractionally as steadiness points accumulate (see lib/steady.js
+//     — a shaky sample dents progress, it never wipes it), but dots
+//     alone never fire. Firing needs 2 consecutive firing-grade
+//     frames (still + sharp), 1s since the preview started (phone
+//     autofocus settles), and a framed card (lib/framing.js — whole,
+//     big enough, contrasting background). When the gate blocks
+//     firing, a single short guidance chip names the most-blocking
+//     reason, Chase check-deposit style ("Move closer", "Show all
+//     four corners", "Needs a darker background", "Tilt a little",
+//     "Hold steady") — blocked firing always explains itself.
 //   - A manual shutter for kids who don't want to wait, and a
 //     "photo picker instead" escape that always works.
 //   - A soft shine chip when the frame looks very washed out
@@ -39,7 +44,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { measureShot } from '../lib/shotquality.js';
-import { steadyStep, steadyDotFill, STEADY_GOAL, SHARP_MIN } from '../lib/steady.js';
+import { steadyStep, steadyDotFill, SHARP_MIN, isFireSample, goodStreakStep, shouldFire, FIRE_MIN_MS } from '../lib/steady.js';
+import { analyzeCardPixels } from '../lib/capture.js';
+import { assessFraming, luminanceContrast, guidanceFor } from '../lib/framing.js';
 import { IconCamera, IconX } from './icons';
 
 const SAMPLE_MS = 200;
@@ -73,9 +80,11 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
   const sampleRef = useRef(null);
   const prevRef = useRef(null);
   const progressRef = useRef(0);
+  const goodStreakRef = useRef(0);
+  const startRef = useRef(0);
   const bestRef = useRef(null); // sharpest recent full-res canvas
   const doneRef = useRef(false);
-  const [shiny, setShiny] = useState(false);
+  const [guidance, setGuidance] = useState(null);
   const [steadyProgress, setSteadyProgress] = useState(0);
   // Set the instant a shot is taken, BEFORE any async work: the video
   // element is swapped for an uploading state synchronously, so a
@@ -106,6 +115,7 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
           video.srcObject = stream;
           await video.play().catch(() => {});
         }
+        startRef.current = Date.now();
         timer = setInterval(() => {
           const v = videoRef.current;
           if (!v || v.videoWidth === 0 || doneRef.current) return;
@@ -113,11 +123,22 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
             const canvas = sampleRef.current || (sampleRef.current = document.createElement('canvas'));
             const sample = sampleFrame(v, canvas);
             const m = measureShot(sample);
-            setShiny(m.glareFrac >= 0.25);
             const diff = frameDiff(prevRef.current, sample);
             prevRef.current = sample;
+            // Dots: points only, never a trigger (see lib/steady.js).
             progressRef.current = steadyStep(progressRef.current, { diff, sharpness: m.sharpness });
             setSteadyProgress(progressRef.current);
+            // Firing streak: any non-fire sample resets it.
+            const fireSample = isFireSample({ diff, sharpness: m.sharpness });
+            goodStreakRef.current = goodStreakStep(goodStreakRef.current, fireSample);
+            // Framing gate: run the card-box detector on this sample
+            // (160px wide is plenty for the chroma profiles) and
+            // check the box against the frame + background.
+            const box = analyzeCardPixels(sample.data, sample.width, sample.height, v.videoWidth, v.videoHeight);
+            const lum = box ? luminanceContrast(sample.data, sample.width, sample.height, box) : null;
+            const framing = assessFraming(box, lum);
+            const elapsedMs = Date.now() - startRef.current;
+            setGuidance(guidanceFor({ framing, glareFrac: m.glareFrac, lastGood: fireSample, elapsedMs, minMs: FIRE_MIN_MS }));
             // Keep the sharpest recent full-res frame for auto-capture.
             if (m.sharpness >= SHARP_MIN) {
               const full = bestRef.current || (bestRef.current = document.createElement('canvas'));
@@ -125,7 +146,7 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
               full.height = v.videoHeight;
               full.getContext('2d').drawImage(v, 0, 0);
             }
-            if (progressRef.current >= STEADY_GOAL) {
+            if (shouldFire({ goodStreak: goodStreakRef.current, elapsedMs, framed: framing.framed })) {
               doneRef.current = true;
               captureFromBest();
             }
@@ -207,7 +228,7 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
         <span className="camCornerDot camDotBL" />
         <span className="camCornerDot camDotBR" />
       </div>
-      {shiny ? <div className="camChip">Shiny? Tilt a little!</div> : null}
+      {guidance ? <div className="camChip">{guidance}</div> : null}
       <div className="camBar">
         <button className="camShutter" onClick={snapNow} aria-label="Take a picture">
           <IconCamera size={30} /> SNAP
