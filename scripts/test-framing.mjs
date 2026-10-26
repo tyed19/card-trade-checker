@@ -1,7 +1,7 @@
 // Fixtures for the preview firing gate's framing assessment +
 // guidance chip (lib/framing.js) and the pixel-level box detector it
 // runs on (lib/capture.js analyzeCardPixels).
-import { assessFraming, luminanceContrast, guidanceFor } from '../lib/framing.js';
+import { assessFraming, luminanceContrast, guidanceFor, coverOutlineRect } from '../lib/framing.js';
 import { analyzeCardPixels } from '../lib/capture.js';
 
 let pass = 0, fail = 0;
@@ -55,6 +55,44 @@ const cardImg = makeImage(100, 140, (x, y) => (x >= 20 && x < 80 && y >= 20 && y
 const box = analyzeCardPixels(cardImg, 100, 140, 100, 140);
 check('colorful rect on dull ground is found in full mode', box && box.mode === 'full' && box.l > 0.12 && box.l < 0.22 && box.t > 0.08 && box.t < 0.16);
 check('flat frame yields no box', analyzeCardPixels(flat, 20, 20, 20, 20) === null);
+
+// --- REGRESSION (Iron Leaves, iPhone, 2026-10-25): a holo card's own
+// dark middle band splits its row profile into two strong runs, so
+// longest-run-wins kept only one fragment and the height gate
+// returned null -> a lying 'corners' chip and a never-firing gate.
+// The union span must recover the full card, not null.
+const splitCard = makeImage(100, 140, (x, y) => {
+  if (x >= 20 && x < 80 && y >= 20 && y < 120) {
+    if (y >= 60 && y < 80) return [60, 60, 60]; // dark middle band
+    return [220, 40, 40];
+  }
+  return [100, 100, 100];
+});
+const splitBox = analyzeCardPixels(splitCard, 100, 140, 100, 140);
+check('card split by a dark middle band is found as one full box (union span)', splitBox && splitBox.mode === 'full' && splitBox.t < 0.2 && splitBox.h > 0.65);
+
+// --- Outline-relative framing (preview gate): the box is judged
+// against the outline the user frames inside, in video fractions.
+const outline = { l: 0.4, t: 0.24, w: 0.2, h: 0.5 }; // outline rect for a landscape stream in a portrait container
+check('outline: box matching the outline -> framed', (() => { const r = assessFraming({ l: 0.4, t: 0.24, w: 0.2, h: 0.5, mode: 'full' }, goodLum, outline); return r.framed && r.reason === null; })());
+check('outline: box half the outline area -> closer', (() => { const r = assessFraming({ l: 0.45, t: 0.3, w: 0.1, h: 0.25, mode: 'full' }, goodLum, outline); return !r.framed && r.reason === 'closer'; })());
+check('outline: box barely overlapping the outline -> corners', (() => { const r = assessFraming({ l: 0.0, t: 0.0, w: 0.2, h: 0.5, mode: 'full' }, goodLum, outline); return !r.framed && r.reason === 'corners'; })());
+check('outline: box much bigger than the outline -> corners', (() => { const r = assessFraming({ l: 0.1, t: 0.05, w: 0.8, h: 0.9, mode: 'full' }, goodLum, outline); return !r.framed && r.reason === 'corners'; })());
+check('outline: weak background contrast still -> background', (() => { const r = assessFraming({ l: 0.4, t: 0.24, w: 0.2, h: 0.5, mode: 'full' }, { edge: 120, outside: 132 }, outline); return !r.framed && r.reason === 'background'; })());
+check('outline: missing box -> unknown, NEVER corners', (() => { const r = assessFraming(null, goodLum, outline); return !r.framed && r.reason === 'unknown'; })());
+check('outline: rows-mode strip matching vertically -> unknown, not corners', (() => { const r = assessFraming({ l: 0, t: 0.24, w: 1, h: 0.5, mode: 'rows' }, goodLum, outline); return !r.framed && r.reason === 'unknown'; })());
+check('outline: rows-mode strip much shorter than the outline -> closer', (() => { const r = assessFraming({ l: 0, t: 0.3, w: 1, h: 0.2, mode: 'rows' }, goodLum, outline); return !r.framed && r.reason === 'closer'; })());
+check('unknown reason produces NO chip (steady phone, fallback hold governs)', guidanceFor({ framing: { framed: false, reason: 'unknown' }, glareFrac: 0, lastGood: true, ...settled }) === null);
+check('unknown reason + moving phone -> Hold steady, never corners', guidanceFor({ framing: { framed: false, reason: 'unknown' }, glareFrac: 0, lastGood: false, ...settled }) === 'Hold steady');
+
+// --- coverOutlineRect: landscape stream (1920x1080) in a portrait
+// container (390x844) with a centered 78%-width outline.
+const cover = coverOutlineRect({
+  videoRect: { left: 0, top: 0, width: 390, height: 844 },
+  outlineRect: { left: 43, top: 200, width: 304, height: 425 },
+  videoW: 1920, videoH: 1080,
+});
+check('cover transform: outline maps to the central video slice (l~0.40, w~0.20, h~0.50)', Math.abs(cover.l - 0.40) < 0.02 && Math.abs(cover.w - 0.20) < 0.02 && Math.abs(cover.h - 0.50) < 0.02 && Math.abs(cover.t - 0.24) < 0.02);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

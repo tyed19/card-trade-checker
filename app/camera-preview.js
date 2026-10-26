@@ -16,12 +16,21 @@
 //     — a shaky sample dents progress, it never wipes it), but dots
 //     alone never fire. Firing needs 2 consecutive firing-grade
 //     frames (still + sharp), 1s since the preview started (phone
-//     autofocus settles), and a framed card (lib/framing.js — whole,
-//     big enough, contrasting background). When the gate blocks
-//     firing, a single short guidance chip names the most-blocking
-//     reason, Chase check-deposit style ("Move closer", "Show all
-//     four corners", "Needs a darker background", "Tilt a little",
-//     "Hold steady") — blocked firing always explains itself.
+//     autofocus settles), and a card framed inside the on-screen
+//     outline (lib/framing.js, outline-relative — the video is
+//     shown with object-fit: cover, so the outline the user frames
+//     inside is a center crop of the analyzed frame, and judging
+//     the box against the full frame edge was both unsatisfiable
+//     and dishonest). When the gate blocks firing, a single short
+//     guidance chip names the most-blocking reason, Chase
+//     check-deposit style ("Move closer", "Show all four corners",
+//     "Needs a darker background", "Tilt a little", "Hold steady")
+//     — blocked firing always explains itself, and a missing box
+//     never produces a 'corners' chip: the fallback hold below is
+//     what fires instead.
+//   - Fallback hold: a box-detector miss must never permanently
+//     veto auto-capture. A long unbroken run of firing-grade
+//     frames (~2.6s) fires even without a framed box.
 //   - A manual shutter for kids who don't want to wait, and a
 //     "photo picker instead" escape that always works.
 //   - A soft shine chip when the frame looks very washed out
@@ -44,9 +53,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { measureShot } from '../lib/shotquality.js';
-import { steadyStep, steadyDotFill, SHARP_MIN, isFireSample, goodStreakStep, shouldFire, FIRE_MIN_MS } from '../lib/steady.js';
+import { steadyStep, steadyDotFill, SHARP_MIN, isFireSample, goodStreakStep, shouldFire, shouldFireFallback, FIRE_MIN_MS } from '../lib/steady.js';
 import { analyzeCardPixels } from '../lib/capture.js';
-import { assessFraming, luminanceContrast, guidanceFor } from '../lib/framing.js';
+import { assessFraming, luminanceContrast, guidanceFor, coverOutlineRect } from '../lib/framing.js';
 import { IconCamera, IconX } from './icons';
 
 const SAMPLE_MS = 200;
@@ -76,6 +85,7 @@ function frameDiff(a, b) {
 
 export default function CameraPreview({ stage, onCapture, onClose, onFallback, onAutoFail }) {
   const videoRef = useRef(null);
+  const outlineRef = useRef(null);
   const streamRef = useRef(null);
   const sampleRef = useRef(null);
   const prevRef = useRef(null);
@@ -133,10 +143,29 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
             goodStreakRef.current = goodStreakStep(goodStreakRef.current, fireSample);
             // Framing gate: run the card-box detector on this sample
             // (160px wide is plenty for the chroma profiles) and
-            // check the box against the frame + background.
+            // check the box against the OUTLINE the user sees — the
+            // outline div's real on-screen rect, mapped through the
+            // object-fit: cover transform into video fractions.
+            // Judging the box against the full frame edge was the
+            // bug: a card filling the outline is small in
+            // full-frame fractions, and a missing box was
+            // misreported as 'corners'. When the outline rect is
+            // unavailable, assessFraming falls back to the legacy
+            // frame-relative path.
             const box = analyzeCardPixels(sample.data, sample.width, sample.height, v.videoWidth, v.videoHeight);
             const lum = box ? luminanceContrast(sample.data, sample.width, sample.height, box) : null;
-            const framing = assessFraming(box, lum);
+            let outline = null;
+            try {
+              const oEl = outlineRef.current;
+              if (oEl && v.videoWidth && v.videoHeight) {
+                outline = coverOutlineRect({
+                  videoRect: v.getBoundingClientRect(),
+                  outlineRect: oEl.getBoundingClientRect(),
+                  videoW: v.videoWidth, videoH: v.videoHeight,
+                });
+              }
+            } catch { /* outline stays null -> legacy framing */ }
+            const framing = assessFraming(box, lum, outline);
             const elapsedMs = Date.now() - startRef.current;
             setGuidance(guidanceFor({ framing, glareFrac: m.glareFrac, lastGood: fireSample, elapsedMs, minMs: FIRE_MIN_MS }));
             // Keep the sharpest recent full-res frame for auto-capture.
@@ -146,7 +175,8 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
               full.height = v.videoHeight;
               full.getContext('2d').drawImage(v, 0, 0);
             }
-            if (shouldFire({ goodStreak: goodStreakRef.current, elapsedMs, framed: framing.framed })) {
+            if (shouldFire({ goodStreak: goodStreakRef.current, elapsedMs, framed: framing.framed })
+              || shouldFireFallback({ goodStreak: goodStreakRef.current, elapsedMs })) {
               doneRef.current = true;
               captureFromBest();
             }
@@ -224,7 +254,7 @@ export default function CameraPreview({ stage, onCapture, onClose, onFallback, o
   return (
     <div className="camPreview">
       <video ref={videoRef} playsInline muted autoPlay className="camVideo" />
-      <div className={`camOutline${stage === 'number' ? ' numberStage' : ''}`}>
+      <div ref={outlineRef} className={`camOutline${stage === 'number' ? ' numberStage' : ''}`}>
         <span className="camCornerDot camDotBL" />
         <span className="camCornerDot camDotBR" />
       </div>

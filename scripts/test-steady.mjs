@@ -2,7 +2,7 @@
 // (lib/steady.js). Dots and firing are separate: points fill the dots
 // and never fire; firing needs a consecutive-fire-sample streak, a
 // settle window, and a framed card.
-import { steadyStep, steadyDotFill, STEADY_GOAL, isFireSample, goodStreakStep, shouldFire, FIRE_MIN_MS } from '../lib/steady.js';
+import { steadyStep, steadyDotFill, STEADY_GOAL, isFireSample, goodStreakStep, shouldFire, shouldFireFallback, FIRE_FALLBACK_STREAK, FIRE_MIN_MS } from '../lib/steady.js';
 
 let pass = 0, fail = 0;
 function check(name, cond) {
@@ -68,6 +68,22 @@ check('2 consecutive good samples inside the settle window must NOT fire', !ever
 check('a steady-but-unframed case must NOT fire', !everFires([good, good, good], { framed: false }));
 
 check('a good sample after a bad one restarts the streak (needs a fresh pair)', !everFires([good, bad, good]) && everFires([good, bad, good, good]));
+
+// --- Fallback hold (Iron Leaves regression): a long unbroken run of
+// firing-grade frames fires even when the box gate never clears.
+function everFiresFallback(seq, { elapsedMs = 5000 } = {}) {
+  let streak = 0;
+  for (const s of seq) {
+    streak = goodStreakStep(streak, isFireSample(s));
+    if (shouldFireFallback({ goodStreak: streak, elapsedMs })) return true;
+  }
+  return false;
+}
+const hold = Array.from({ length: FIRE_FALLBACK_STREAK }, () => good);
+check('fallback: a full ~2.6s steady hold fires without a framed box', everFiresFallback(hold));
+check('fallback: one sample short of the hold does NOT fire', !everFiresFallback(hold.slice(0, -1)));
+check('fallback: a broken streak never reaches the hold', !everFiresFallback([...hold.slice(0, 6), bad, ...hold.slice(0, 6)]));
+check('fallback: inside the settle window it must NOT fire', !everFiresFallback(hold, { elapsedMs: 400 }));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
