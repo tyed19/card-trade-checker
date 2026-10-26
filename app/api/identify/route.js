@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getStageStats } from '../../../lib/ocr';
 import { findCandidates } from '../../../lib/identify';
-import { identifyPhoto } from '../../../lib/hybrid';
-import { summarizeProgress } from '../../../lib/progress';
+import { identifyPhoto, NUMBER_CORNER_HINT } from '../../../lib/hybrid';
+import { summarizeProgress, deadlineRetake } from '../../../lib/progress';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -45,11 +45,19 @@ export async function POST(req) {
     // (which is what "Something went wrong" on the phone actually was).
     const DEADLINE_MS = parseInt(process.env.IDENTIFY_DEADLINE_MS || '50000', 10) || 50000;
     let timer = null;
+    // Latest pipeline snapshot (lib/hybrid.js reports each stage
+    // boundary): when the race below fires mid-flight, this is what
+    // the pipeline had already established — the deadline answer is
+    // built from it instead of discarding the whole slow lane.
+    let latestPartial = null;
     const work = (async () => {
       // Phase 2 hybrid: picture-matching proposes, OCR confirms/rescues
       // (lib/hybrid.js). Falls back to the pure OCR path on its own
       // whenever the picture path is unavailable or has no match.
-      return identifyPhoto(buffer, { deadlineAt: t0 + DEADLINE_MS - 4000, priorOcr, clientCropped });
+      return identifyPhoto(buffer, {
+        deadlineAt: t0 + DEADLINE_MS - 4000, priorOcr, clientCropped,
+        onPartial: (snap) => { latestPartial = snap; },
+      });
     })();
     const timeout = new Promise((resolve) => {
       timer = setTimeout(() => resolve(null), Math.max(1000, DEADLINE_MS - (Date.now() - t0)));
@@ -57,8 +65,13 @@ export async function POST(req) {
     const done = await Promise.race([work, timeout]);
     clearTimeout(timer);
     if (!done) {
+      // Deadline, not failure: a slow lane degrades to the SAME
+      // guided retake a normal safe-fail returns (progress ring +
+      // missing-piece hint + second-photo offer), never to a generic
+      // error. The kid flow sees the ring and hears "take the picture
+      // again"; failureKind is grown-ups diagnostics only.
       return NextResponse.json({
-        ok: false, error: 'slow', retry: true,
+        ...deadlineRetake(latestPartial, NUMBER_CORNER_HINT),
         detail: `Identification exceeded ${DEADLINE_MS}ms budget`,
         timing: { totalMs: Date.now() - t0 },
         ocrStages: getStageStats(),
@@ -112,7 +125,7 @@ export async function POST(req) {
     });
   } catch (err) {
     return NextResponse.json(
-      { ok: false, error: 'identify-failed', debugError: String(err && err.message || err), timing: { totalMs: Date.now() - t0 } },
+      { ok: false, error: 'identify-failed', failureKind: 'server', debugError: String(err && err.message || err), timing: { totalMs: Date.now() - t0 } },
       { status: 500 }
     );
   }

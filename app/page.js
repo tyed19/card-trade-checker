@@ -160,7 +160,7 @@ function playClip(key, fallbackText) {
   });
 }
 
-const emptySide = () => ({ cards: [], choices: null, busy: false, status: '', hint: null, progress: null });
+const emptySide = () => ({ cards: [], choices: null, busy: false, status: '', hint: null, progress: null, failureKind: null });
 
 // Upload prep lives in lib/capture.js now (capture overhaul): crop to
 // the card and upload the crop at high quality, with a pre-submit
@@ -228,6 +228,18 @@ export default function Home() {
   // preview highlights just that piece (the number stage grows and
   // pulses the two bottom-edge dots) and is otherwise unchanged.
   const [preview, setPreview] = useState(null);
+  // Warm again when the capture preview opens: the identify call
+  // follows seconds later, and a fresh ping right before it beats a
+  // page-mount ping from minutes ago on serverless (instances are
+  // reused opportunistically, never guaranteed). One effect covers
+  // every preview-open path (photo button, second photo, progressive
+  // next shot) — the preview component itself is untouched. (This
+  // must sit AFTER the preview state above: the dep array evaluates
+  // during render, so referencing preview earlier is a TDZ error.)
+  useEffect(() => {
+    if (!preview) return;
+    try { fetch('/api/warm').catch(() => {}); } catch { /* ignore */ }
+  }, [preview]);
   // Camera-failure notice: set when the preview AND (in the shell)
   // the native-plugin fallback both missed, so the failure is named
   // with the way back instead of silently dropping to the picker.
@@ -483,7 +495,7 @@ export default function Home() {
     // ring: the new photo's own result will set it again. A
     // progressive shot keeps the last ring until its response lands,
     // so the kid never watches banked progress blink away mid-scan.
-    setSide(side, { busy: true, choices: null, status: 'Looking at your card…', hint: null, secondPhoto: false, ...(withPrior ? {} : { progress: null }) });
+    setSide(side, { busy: true, choices: null, status: 'Looking at your card…', hint: null, secondPhoto: false, failureKind: null, ...(withPrior ? {} : { progress: null }) });
     playClip('looking', 'Looking at your card');
     try {
       // Crop-first upload (capture overhaul) + pre-submit blur gate:
@@ -529,13 +541,13 @@ export default function Home() {
         // Status stays EMPTY here: the choices block renders its own
         // "Tap your card!" heading — setting it here too printed the
         // heading twice (the doubled heading in the user's screenshot).
-        setSide(side, { busy: false, choices, status: '', hint: null, secondPhoto: false, progress: null });
+        setSide(side, { busy: false, choices, status: '', hint: null, secondPhoto: false, progress: null, failureKind: null });
         playClip('tap', 'Tap your card!');
       } else if (json.ok && json.stumped) {
         // The photo read fine (a solid number) but the card book came
         // back empty — don't blame the kid's photo for that. No
         // progressive ring here: another angle cannot fix the book.
-        setSide(side, { busy: false, choices: null, status: 'That one stumped me! One more try!', hint: json.retakeHint || null, secondPhoto: json.secondPhoto === true, progress: null });
+        setSide(side, { busy: false, choices: null, status: 'That one stumped me! One more try!', hint: json.retakeHint || null, secondPhoto: json.secondPhoto === true, progress: null, failureKind: null });
         playClip('stumped', 'That one stumped me! Try again!');
       } else if (json.ok && json.progress) {
         // Progressive capture: this shot banked some signals but not
@@ -549,18 +561,18 @@ export default function Home() {
         // grown-ups hint line stays: the ring is the kid's signal,
         // the hint is the grown-ups' explanation of the same stage.
         // Safety is untouched: the ring never creates a choice.
-        setSide(side, { busy: false, choices: null, status: '', hint: json.retakeHint || null, secondPhoto: false, progress: json.progress });
+        setSide(side, { busy: false, choices: null, status: '', hint: json.retakeHint || null, secondPhoto: false, progress: json.progress, failureKind: json.failureKind || null });
         playClip('takeAgain', 'OK! Take the picture again');
       } else if (json.ok) {
-        setSide(side, { busy: false, choices: null, status: 'I could not read that one. Flat + bright, try again!', hint: json.retakeHint || null, secondPhoto: json.secondPhoto === true });
+        setSide(side, { busy: false, choices: null, status: 'I could not read that one. Flat + bright, try again!', hint: json.retakeHint || null, secondPhoto: json.secondPhoto === true, failureKind: null });
         playClip('unreadable', 'I could not read that one. Try again, flat and bright!');
       } else {
-        setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!', hint: null, secondPhoto: false });
+        setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!', hint: null, secondPhoto: false, failureKind: json.failureKind || 'server' });
         playClip('wrong', 'Something went wrong. Try again!');
       }
     } catch {
       if (stale()) return;
-      setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!', secondPhoto: false });
+      setSide(side, { busy: false, choices: null, status: 'Something went wrong. Tap TRY AGAIN!', secondPhoto: false, failureKind: 'network' });
       playClip('wrong', 'Something went wrong. Try again!');
     }
   }
@@ -1148,6 +1160,11 @@ export default function Home() {
                 </tr>
               </tbody>
             </table>
+            {grownTradeCtx && (sides.mine.failureKind || sides.theirs.failureKind) && (
+              <p style={{ opacity: 0.85 }}>
+                Last scan trouble (this note lives only on this screen — it is never stored or sent anywhere): {['mine', 'theirs'].filter((s) => sides[s].failureKind).map((s) => `${s === 'mine' ? 'My card' : 'Their card'} — ${sides[s].failureKind === 'deadline' ? 'took too long (the server was slow)' : sides[s].failureKind === 'network' ? 'network trouble reaching the server' : 'server error'}`).join(' · ')}
+              </p>
+            )}
             {['mine', 'theirs'].flatMap((side) => sides[side].cards).map((c, i) => (
               <div key={'note' + i} style={{ opacity: 0.85 }}>
                 {c.proxy && (
