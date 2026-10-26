@@ -24,6 +24,12 @@ const nextConfig = {
       // packages carry every platform and would blow the bundle limit.
       './data/catalog-en.json',
       './data/catalog-ja.json',
+      // Local attack/ability-title + HP index (data/attacks-en.json):
+      // the rescue channel reads it via the same process.cwd() array-
+      // join path as the catalog, which static tracing cannot see —
+      // without this line the file never ships and the loader
+      // silently falls back to the pokemontcg.io API rescue.
+      './data/attacks-en.json',
       './data/index-full.bin',
       './data/index-full.json',
       './data/index-full.scales.json',
