@@ -14,7 +14,9 @@ import {
 import * as store from '../lib/store';
 import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, fmtPriceLine, priceCoverage, tradeIsUnpriceable, FAIR_BAND } from '../lib/logic';
 import { decodePayload } from '../lib/links';
-import { takeNativePhoto, verdictHaptic } from '../lib/native';
+import { takeNativePhoto, verdictHaptic, isNative } from '../lib/native';
+import { prepareForUpload, assessBitmap } from '../lib/capture';
+import CameraPreview from './camera-preview';
 
 const DEMO = {
   mine: {
@@ -159,41 +161,10 @@ function playClip(key, fallbackText) {
 
 const emptySide = () => ({ cards: [], choices: null, busy: false, status: '', hint: null });
 
-// Shrink big phone photos before upload: full-size images made the
-// server OCR blow its time limit (the live 504s). Card bands are read
-// from relative positions, so shrinking loses nothing geometrically —
-// but the collector-number digits are tiny, so keep as much resolution
-// as the time budget tolerates: 2400px max dimension at JPEG q90 (a
-// fresh iPhone photo is 4032px; at 1800 the number digits were already
-// marginal, and a 2400px portrait JPEG is ~1MB, far under any limit).
-// EXIF orientation is requested explicitly ('from-image'): a phone
-// portrait shot is stored as landscape pixels + a rotate flag, and if
-// the bitmap ignores the flag the canvas bakes a SIDEWAYS photo with
-// no flag left for the server to fix — every reading band then lands
-// wrong. Where the option is unsupported it throws and we fall back
-// to the plain call.
-async function shrinkForUpload(file) {
-  try {
-    if (!file || !file.type || !file.type.startsWith('image/')) return file;
-    let bmp;
-    try {
-      bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
-    } catch {
-      bmp = await createImageBitmap(file);
-    }
-    const MAX = 2400;
-    if (Math.max(bmp.width, bmp.height) <= MAX) { bmp.close?.(); return file; }
-    const scale = MAX / Math.max(bmp.width, bmp.height);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bmp.width * scale);
-    canvas.height = Math.round(bmp.height * scale);
-    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
-    bmp.close?.();
-    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
-    if (!blob) return file;
-    return new File([blob], 'photo.jpg', { type: 'image/jpeg' });
-  } catch { return file; }
-}
+// Upload prep lives in lib/capture.js now (capture overhaul): crop to
+// the card and upload the crop at high quality, with a pre-submit
+// blur gate. The old whole-frame 2400px/q90 shrink survives inside
+// prepareForUpload as the fallback when no card box is found.
 
 export default function Home() {
   // Preload the voice clips on the first tap anywhere, so they start
@@ -246,6 +217,14 @@ export default function Home() {
   // The hidden file input is shared by normal and second-photo picks:
   // this flag tells its onChange which kind the next pick is.
   const secondPhotoPick = useRef({ mine: false, theirs: false });
+  // Live guided preview (capture overhaul): null, or { side, second }.
+  // Browser only — the native shell keeps the camera plugin path.
+  const [preview, setPreview] = useState(null);
+  const previewAvailable = () => {
+    try {
+      return !isNative() && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    } catch { return false; }
+  };
 
   // ---- Phase 3 state: views, per-side kid assignment, pickers ----
   const binderState = useStoreState();
@@ -376,6 +355,24 @@ export default function Home() {
     const shot = await takeNativePhoto();
     if (shot === 'cancelled') return;
     if (shot) { onPhoto(side, shot); return; }
+    // Browser with a camera: guided live preview (outline, steady
+    // auto-capture) instead of the bare file picker. Any preview
+    // failure falls back to the picker via onPreviewFallback.
+    if (previewAvailable()) { setPreview({ side, second: false }); return; }
+    fileRefs[side].current && fileRefs[side].current.click();
+  }
+
+  function onPreviewCapture(file) {
+    if (!preview) return;
+    const { side, second } = preview;
+    setPreview(null);
+    onPhoto(side, file, second);
+  }
+
+  function onPreviewFallback() {
+    if (!preview) return;
+    const { side } = preview;
+    setPreview(null);
     fileRefs[side].current && fileRefs[side].current.click();
   }
 
@@ -388,6 +385,10 @@ export default function Home() {
     const shot = await takeNativePhoto();
     if (shot === 'cancelled') return;
     if (shot) { onPhoto(side, shot, true); return; }
+    // The second shot opens straight into the guided preview when
+    // available: one tap, tilt guidance visible, no restart of the
+    // flow — the merge flag rides on the preview capture.
+    if (previewAvailable()) { setPreview({ side, second: true }); return; }
     secondPhotoPick.current[side] = true;
     fileRefs[side].current && fileRefs[side].current.click();
   }
@@ -408,9 +409,32 @@ export default function Home() {
     setSide(side, { busy: true, choices: null, status: 'Looking at your card…', hint: null, secondPhoto: false });
     playClip('looking', 'Looking at your card');
     try {
-      const upload = await shrinkForUpload(file);
+      // Crop-first upload (capture overhaul) + pre-submit blur gate:
+      // a blurry shot fails HERE in under a second with a retry,
+      // never after a 10-50s server round-trip that was doomed from
+      // the start. Glare never blocks (weakly separable — see
+      // lib/shotquality.js); it only earns a tilt hint later.
+      const { file: upload, cropped } = await prepareForUpload(file);
+      try {
+        const bmp = await createImageBitmap(upload, { imageOrientation: 'from-image' }).catch(() => null)
+          || await createImageBitmap(upload).catch(() => null);
+        if (bmp) {
+          try {
+            const verdict = await assessBitmap(bmp);
+            if (verdict.verdict === 'blurry') {
+              if (stale()) return;
+              setSide(side, { busy: false, choices: null, status: 'That photo is blurry! Hold still and try again!', hint: null, secondPhoto: false });
+              playClip('unreadable', 'That photo is blurry! Hold still and try again!');
+              return;
+            }
+          } finally {
+            try { bmp.close?.(); } catch { /* ignore */ }
+          }
+        }
+      } catch { /* pre-check never blocks on its own failure */ }
       const form = new FormData();
       form.append('photo', upload);
+      if (cropped) form.append('cropped', '1');
       if (withPrior && lastOcrRef.current[side]) {
         form.append('priorOcr', JSON.stringify(lastOcrRef.current[side]));
       }
@@ -883,7 +907,7 @@ export default function Home() {
 
       {!grownOpen && view === 'binder' && <BinderHome kid={activeKid} go={go} kidCount={binderState.kids.length} />}
       {!grownOpen && view === 'set' && <SetPage kid={activeKid} setKey={setKey} go={go} />}
-      {!grownOpen && view === 'scan' && <ScanSession kid={activeKid} go={go} shrinkForUpload={shrinkForUpload} playClip={playClip} />}
+      {!grownOpen && view === 'scan' && <ScanSession kid={activeKid} go={go} prepareForUpload={prepareForUpload} playClip={playClip} />}
       {!grownOpen && view === 'ideas' && <IdeasScreen go={go} onStartTrade={startTradeFromIdeas} />}
       {!grownOpen && view === 'profile' && <ProfileScreen kid={activeKid} go={go} />}
 
@@ -1067,6 +1091,13 @@ export default function Home() {
           </div>
         </div>
       )}
+      {preview ? (
+        <CameraPreview
+          onCapture={onPreviewCapture}
+          onClose={() => setPreview(null)}
+          onFallback={onPreviewFallback}
+        />
+      ) : null}
     </main>
   );
 }

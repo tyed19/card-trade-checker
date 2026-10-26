@@ -424,7 +424,7 @@ export function SetPage({ kid, setKey, go }) {
 // Same server identify pipeline + candidate UI as the trade flow;
 // every confirmed card goes straight into the active kid's binder.
 
-export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
+export function ScanSession({ kid, go, prepareForUpload, playClip }) {
   const [count, setCount] = useState(0);
   const [status, setStatus] = useState('');
   const [hint, setHint] = useState(null);
@@ -456,9 +456,10 @@ export function ScanSession({ kid, go, shrinkForUpload, playClip }) {
     setBusy(true); setChoices(null); setStatus(''); setHint(null);
     playClip('looking', '');
     try {
-      const small = await shrinkForUpload(file);
+      const { file: small, cropped } = await prepareForUpload(file);
       const form = new FormData();
       form.append('photo', small, 'card.jpg');
+      if (cropped) form.append('cropped', '1');
       const res = await fetch('/api/identify', { method: 'POST', body: form });
       const json = await res.json();
       if (!json.ok) {

@@ -64,6 +64,53 @@ input[type='file'] { display: none; }
   box-shadow: 0 5px 0 #095e5d; margin: 4px 0 10px;
 }
 .secondPhotoBtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #095e5d; }
+/* Second-photo button, enlarged (capture overhaul): after a hard
+   fail this is THE next action, so it gets the same visual weight as
+   TAKE A PICTURE instead of reading as a secondary link. */
+.secondPhotoBtn { padding: 22px 10px; font-size: clamp(22px, 6vw, 30px); }
+
+/* Live guided capture overlay (capture overhaul): full-screen video,
+   card outline at the real card's aspect (63:88), dots on the bottom
+   edge where the collector number lives, steady dots that fill as
+   the shot holds still for auto-capture. */
+.camPreview {
+  position: fixed; inset: 0; z-index: 90; background: #000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.camVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.camOutline {
+  position: relative; width: 78%; aspect-ratio: 63 / 88; max-height: 68vh;
+  border: 4px solid rgba(255, 203, 5, 0.95); border-radius: 18px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45); pointer-events: none;
+}
+.camCornerDot {
+  position: absolute; bottom: -9px; width: 18px; height: 18px; border-radius: 50%;
+  background: #ffcb05; border: 3px solid #fff;
+}
+.camDotBL { left: 12%; }
+.camDotBR { right: 12%; }
+.camChip {
+  position: relative; margin-top: 14px; background: rgba(255, 203, 5, 0.95); color: #14213d;
+  font-weight: 900; font-size: 18px; padding: 8px 16px; border-radius: 999px;
+}
+.camBar { position: relative; display: flex; gap: 16px; align-items: center; margin-top: 18px; }
+.camShutter {
+  display: flex; align-items: center; gap: 10px; border: none; cursor: pointer;
+  background: #ffcb05; color: #14213d; border-radius: 999px; padding: 18px 30px;
+  font-size: 24px; font-weight: 900; box-shadow: 0 5px 0 #c79a00;
+}
+.camShutter:active { transform: translateY(3px); box-shadow: 0 2px 0 #c79a00; }
+.camClose {
+  width: 52px; height: 52px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(255, 255, 255, 0.9); color: #14213d; display: flex; align-items: center; justify-content: center;
+}
+.camPicker {
+  position: relative; margin-top: 14px; background: none; border: none; cursor: pointer;
+  color: rgba(255, 255, 255, 0.85); font-size: 15px; text-decoration: underline;
+}
+.camSteady { position: relative; display: flex; gap: 8px; margin-top: 12px; }
+.camSteady span { width: 12px; height: 12px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
+.camSteady span.on { background: #ffcb05; }
 
 .choices { text-align: center; }
 .choices .q { font-size: clamp(20px, 6vw, 26px); font-weight: 900; margin: 10px 0; }

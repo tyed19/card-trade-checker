@@ -34,6 +34,10 @@ export async function POST(req) {
       const rawPrior = form.get('priorOcr');
       if (typeof rawPrior === 'string' && rawPrior) priorOcr = JSON.parse(rawPrior);
     } catch { priorOcr = null; }
+    // Capture overhaul: the client sends cropped=1 when the upload is
+    // already a tight high-quality card crop — the pipeline must NOT
+    // re-encode it (that second JPEG pass crushed text reads).
+    const clientCropped = form.get('cropped') === '1';
     // Hard deadline comfortably inside the platform cap (maxDuration 60):
     // if the pipeline is having a slow day, answer with structured JSON
     // the client can act on instead of dying as a platform 504 page
@@ -44,7 +48,7 @@ export async function POST(req) {
       // Phase 2 hybrid: picture-matching proposes, OCR confirms/rescues
       // (lib/hybrid.js). Falls back to the pure OCR path on its own
       // whenever the picture path is unavailable or has no match.
-      return identifyPhoto(buffer, { deadlineAt: t0 + DEADLINE_MS - 4000, priorOcr });
+      return identifyPhoto(buffer, { deadlineAt: t0 + DEADLINE_MS - 4000, priorOcr, clientCropped });
     })();
     const timeout = new Promise((resolve) => {
       timer = setTimeout(() => resolve(null), Math.max(1000, DEADLINE_MS - (Date.now() - t0)));

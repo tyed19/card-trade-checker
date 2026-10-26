@@ -24,6 +24,12 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>FairSwap uses your camera so you can photograph your Pokémon cards to check a trade.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FairSwap can use a photo from your library so you can check a trade with a card picture you already took.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>FairSwap can save a picture to your photo library when you choose to share one from the app.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
