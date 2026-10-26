@@ -78,10 +78,29 @@ input[type='file'] { display: none; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
 .camVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* RESET outline (2026-10-25): the guide itself is the only progress
+   language. The base border is a plain white guide; border segments
+   fill gold ONLY as the server confirms each piece (top = title,
+   sides = art, bottom = number — see lib/outline.js), and only the
+   missing piece's segment pulses. Live framing quality never fills,
+   so the outline can never stall mid-way like the old percent did. */
 .camOutline {
   position: relative; width: 78%; aspect-ratio: 63 / 88; max-height: 68vh;
-  border: 4px solid rgba(255, 203, 5, 0.95); border-radius: 18px;
+  border: 4px solid rgba(255, 255, 255, 0.65); border-radius: 18px;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45); pointer-events: none;
+}
+.camOutline.lockName { border-top-color: #ffcb05; }
+.camOutline.lockArt { border-left-color: #ffcb05; border-right-color: #ffcb05; }
+.camOutline.lockNumber { border-bottom-color: #ffcb05; }
+.camOutline.pulseName { animation: camPulseTop 1s ease-in-out infinite; }
+.camOutline.pulseNumber { animation: camPulseBottom 1s ease-in-out infinite; }
+@keyframes camPulseTop {
+  0%, 100% { border-top-color: rgba(255, 255, 255, 0.65); }
+  50% { border-top-color: #ffcb05; }
+}
+@keyframes camPulseBottom {
+  0%, 100% { border-bottom-color: rgba(255, 255, 255, 0.65); }
+  50% { border-bottom-color: #ffcb05; }
 }
 .camCornerDot {
   position: absolute; bottom: -9px; width: 18px; height: 18px; border-radius: 50%;
@@ -108,9 +127,6 @@ input[type='file'] { display: none; }
   position: relative; margin-top: 14px; background: none; border: none; cursor: pointer;
   color: rgba(255, 255, 255, 0.85); font-size: 15px; text-decoration: underline;
 }
-.camSteady { position: relative; display: flex; gap: 8px; margin-top: 12px; }
-.camSteady span { width: 12px; height: 12px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
-.camSteady span.on { background: #ffcb05; }
 /* Shown the instant a shot is taken, in place of the video: the video
    element must never sit stream-less on screen (Android WebView
    paints its grey play glyph over it). */
@@ -130,36 +146,6 @@ input[type='file'] { display: none; }
 }
 .camNotice button.camNoticeX { background: transparent; color: #14213d; padding: 8px; font-size: 18px; }
 
-/* Progressive capture: the number stage grows and pulses the two
-   bottom-edge dots — where the collector number lives — so the kid
-   frames the number corner, without a word of instruction. */
-.camOutline.numberStage .camCornerDot {
-  width: 26px; height: 26px; bottom: -13px;
-  animation: camDotPulse 1s ease-in-out infinite;
-}
-@keyframes camDotPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.35); }
-}
-
-/* Live zonal scan: outlines on the detected card itself, one per piece
-   the app needs (name strip, art, number corner). The layer covers
-   the preview exactly like the video does, and each zone is
-   positioned in pixels from the detected card box — never from the
-   fixed guide, whose bottom zone landed on the table whenever the
-   card rode high in the outline. States are honest
-   by construction: `needs` sparkles (live quality says not readable
-   yet), `ready` is a steady bright outline (looks readable live),
-   `locked` is solid gold — and locked is set ONLY from the server's
-   progress summary, never from live quality. Percent counts locks
-   only. The pulse marks the missing stage's zone while unlocked. */
-.camPercent {
-  position: relative; margin-bottom: 10px; color: #ffcb05;
-  font-size: 20px; font-weight: 900; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
-}
-.camZoneLayer {
-  position: absolute; inset: 0; pointer-events: none;
-}
 /* Tap-to-focus reticle: native-style square at the tap point, fading
    out on its own. Pure confirmation UI — the focus attempt itself
    is a track-constraint toggle (see app/camera-preview.js), and on
@@ -175,38 +161,6 @@ input[type='file'] { display: none; }
   30% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
 }
-.camZone {
-  position: absolute; border-radius: 10px;
-  pointer-events: none;
-}
-.camZone.needs {
-  border: 3px dashed rgba(255, 203, 5, 0.9);
-  animation: camZoneSparkle 1.2s ease-in-out infinite;
-}
-.camZone.ready { border: 3px solid rgba(255, 203, 5, 0.95); }
-.camZone.locked {
-  border: 4px solid #ffcb05; background: rgba(255, 203, 5, 0.14);
-  box-shadow: 0 0 12px rgba(255, 203, 5, 0.55);
-}
-.camZonePulse { animation: camZonePulse 1s ease-in-out infinite; }
-@keyframes camZoneSparkle {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
-}
-@keyframes camZonePulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.04); }
-}
-
-/* Progressive capture ring on the trade screen: three dots for
-   picture, name, number — gold is banked, hollow is still missing.
-   The button reuses the second-photo style (same big tap target,
-   teal, distinct from the yellow TAKE A PICTURE button). */
-.progressBlock { text-align: center; margin: 4px 0 10px; }
-.progressDots { display: flex; gap: 10px; justify-content: center; margin: 6px 0 10px; }
-.progressDots span { width: 16px; height: 16px; border-radius: 50%; background: rgba(20, 33, 61, 0.18); border: 2px solid rgba(20, 33, 61, 0.35); }
-.progressDots span.on { background: #ffcb05; border-color: #c79a00; }
-
 .choices { text-align: center; }
 .choices .q { font-size: clamp(20px, 6vw, 26px); font-weight: 900; margin: 10px 0; }
 .choiceGrid { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }

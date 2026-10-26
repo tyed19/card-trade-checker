@@ -31,10 +31,16 @@
 //     fires instead. 'corners' is reserved for a card actually cut
 //     off by the frame edge; a fully visible card that merely
 //     fails to cover the outline gets the alignment hint.
-//   - Zonal outlines (see lib/zones.js) anchored to the DETECTED
-//     card box in display pixels — never to the fixed guide, whose
-//     bottom zone landed on the table whenever the card rode high
-//     in the outline. No box -> no zones rendered at all.
+//   - RESET (2026-10-25): no zone boxes, no steadiness dots, no
+//     percent. The outline itself is the only progress language:
+//     its border fills in segments (top = title, sides = art,
+//     bottom = number) as the SERVER confirms each piece
+//     (lib/outline.js) — never from live framing quality, so it
+//     can never stall mid-way. When the number is the missing
+//     piece, only the bottom segment pulses and the guidance line
+//     says to close up on the bottom number corner. The
+//     steadiness computation still runs (it feeds the firing
+//     rule) — it just no longer renders dots.
 //   - Focus: continuous autofocus is requested up front
 //     (focusMode 'continuous' in constraints + reaffirmed on the
 //     track), and tapping the preview shows a native-style focus
@@ -43,7 +49,7 @@
 //     expose no true focus-point API, so on iOS WKWebView the
 //     platform may ignore focusMode entirely — the tap then only
 //     reaffirms continuous AF, and the reticle still confirms the
-//     tap. Either way the preview, gate, chips, zones, and firing
+//     tap. Either way the preview, gate, chips, and firing
 //     rule are untouched by a focus attempt.
 //   - Fallback hold: a box-detector miss must never permanently
 //     veto auto-capture. A long unbroken run of firing-grade
@@ -53,12 +59,12 @@
 //   - A soft shine chip when the frame looks very washed out
 //     (advisory only — single-frame glare detection is weakly
 //     separable, so it never blocks anything).
-//   - Progressive capture (optional `stage` prop): when the previous
-//     shot banked everything except one piece, the outline
-//     highlights just that piece — for the 'number' stage the two
-//     bottom-edge dots grow and pulse, wordlessly pointing at the
-//     collector-number corner. Other stages leave the outline
-//     unchanged (the shine chip already covers glare live).
+//   - Continuation shots (optional `stage` + `locked` props): the
+//     parent re-opens the SAME preview (same SNAP / auto-capture
+//     controls, no separate screen) with the server's banked
+//     pieces as outline fill and the missing piece's segment
+//     pulsing. The corner dots stay on the guide: they are the
+//     target the kid frames into, not annotations on the card.
 //
 // Any failure (no camera, denied permission, getUserMedia missing)
 // calls onAutoFail() when provided (the parent retries via the
@@ -70,10 +76,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { measureShot } from '../lib/shotquality.js';
-import { steadyStep, steadyDotFill, SHARP_MIN, isFireSample, goodStreakStep, shouldFire, shouldFireFallback, FIRE_MIN_MS } from '../lib/steady.js';
+import { SHARP_MIN, isFireSample, goodStreakStep, shouldFire, shouldFireFallback, FIRE_MIN_MS } from '../lib/steady.js';
 import { analyzeCardPixels } from '../lib/capture.js';
-import { assessFraming, luminanceContrast, guidanceFor, coverOutlineRect, coverBoxDisplayRect } from '../lib/framing.js';
-import { ZONES, assessZoneQuality, deriveZoneDisplay, zoneDisplayRects } from '../lib/zones.js';
+import { assessFraming, luminanceContrast, guidanceFor, coverOutlineRect } from '../lib/framing.js';
+import { outlineSegments, outlineClasses } from '../lib/outline.js';
 import { IconCamera, IconX } from './icons';
 
 const SAMPLE_MS = 200;
@@ -107,25 +113,11 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
   const streamRef = useRef(null);
   const sampleRef = useRef(null);
   const prevRef = useRef(null);
-  const progressRef = useRef(0);
   const goodStreakRef = useRef(0);
   const startRef = useRef(0);
   const bestRef = useRef(null); // sharpest recent full-res canvas
   const doneRef = useRef(false);
   const [guidance, setGuidance] = useState(null);
-  const [steadyProgress, setSteadyProgress] = useState(0);
-  // Live zonal quality, refreshed with every sample: null until a
-  // card box exists to measure inside. Display-only — it never
-  // fires, never locks, never touches the gate.
-  const [zoneQuality, setZoneQuality] = useState(null);
-  // Zone anchor: the detected card box + the guide outline, both in
-  // display pixels relative to the video element (which fills the
-  // preview container exactly, so these double as container
-  // coordinates). Null until a box exists: zones then hide rather
-  // than sit in the wrong place — guide-anchored zones put the
-  // number zone on the table whenever the card rode high in the
-  // guide (Iron Leaves, iPhone, 2026-10-25).
-  const [zoneAnchor, setZoneAnchor] = useState(null);
   // Tap-to-focus reticle: { x, y, id } in preview-container pixels,
   // or null. Rendered only; the refocus attempt lives in focusAt.
   const [focusRing, setFocusRing] = useState(null);
@@ -179,10 +171,11 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
             const m = measureShot(sample);
             const diff = frameDiff(prevRef.current, sample);
             prevRef.current = sample;
-            // Dots: points only, never a trigger (see lib/steady.js).
-            progressRef.current = steadyStep(progressRef.current, { diff, sharpness: m.sharpness });
-            setSteadyProgress(progressRef.current);
-            // Firing streak: any non-fire sample resets it.
+            // Firing streak: any non-fire sample resets it. (The
+            // steadiness points themselves are no longer rendered:
+            // the RESET removed the dots; the streak below is the
+            // only steadiness signal that matters, and it feeds
+            // the firing rule, not a display.)
             const fireSample = isFireSample({ diff, sharpness: m.sharpness });
             goodStreakRef.current = goodStreakStep(goodStreakRef.current, fireSample);
             // Framing gate: run the card-box detector on this sample
@@ -197,17 +190,11 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
             // unavailable, assessFraming falls back to the legacy
             // frame-relative path.
             const box = analyzeCardPixels(sample.data, sample.width, sample.height, v.videoWidth, v.videoHeight);
-            // Zonal live quality, measured inside the detected box:
-            // which zones look readable right now (never a lock —
-            // locks come only from the server, via `locked`).
-            setZoneQuality(assessZoneQuality(sample.data, sample.width, sample.height, box));
             const lum = box ? luminanceContrast(sample.data, sample.width, sample.height, box) : null;
             let outline = null;
-            let anchor = null;
             try {
               const vRect = v.getBoundingClientRect();
               const oEl = outlineRef.current;
-              let guideDisplay = null;
               if (oEl && v.videoWidth && v.videoHeight) {
                 const oRect = oEl.getBoundingClientRect();
                 outline = coverOutlineRect({
@@ -215,21 +202,8 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
                   outlineRect: oRect,
                   videoW: v.videoWidth, videoH: v.videoHeight,
                 });
-                guideDisplay = { left: oRect.left - vRect.left, top: oRect.top - vRect.top, width: oRect.width, height: oRect.height };
               }
-              // Zone anchor: the detected box mapped to display
-              // pixels (rows-mode boxes keep their mode so the
-              // zone helper can fall back to the guide for their
-              // unknown horizontal span). No box -> null -> zones
-              // hidden, never drawn in the wrong place.
-              if (box) {
-                anchor = {
-                  box: { ...coverBoxDisplayRect({ videoRect: vRect, videoW: v.videoWidth, videoH: v.videoHeight, box }), mode: box.mode },
-                  guide: guideDisplay,
-                };
-              }
-            } catch { /* outline stays null -> legacy framing; anchor stays null -> zones hidden */ }
-            setZoneAnchor(anchor);
+            } catch { /* outline stays null -> legacy framing */ }
             const framing = assessFraming(box, lum, outline);
             const elapsedMs = Date.now() - startRef.current;
             setGuidance(guidanceFor({ framing, glareFrac: m.glareFrac, lastGood: fireSample, elapsedMs, minMs: FIRE_MIN_MS }));
@@ -315,7 +289,7 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
   // toggle (continuous -> manual -> continuous) is attempted where
   // the platform honors focusMode, and where it doesn't, the tap
   // reaffirms continuous AF at best. The reticle always confirms
-  // the tap, and the attempt never touches the gate, chips, zones,
+  // the tap, and the attempt never touches the gate, chips,
   // or firing rule — it only nudges the camera's focus state.
   async function focusAt(e) {
     const v = videoRef.current;
@@ -346,44 +320,27 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
     );
   }
 
-  // Zonal display: server locks (gold) + live quality (bright =
-  // looks readable, sparkling = still needs work) + percent of
-  // zones locked. Computed every render from the latest sample.
-  const zoneDisplay = deriveZoneDisplay({ progress: locked || null, quality: zoneQuality });
-  // Zone geometry: pixel rects anchored to the DETECTED card box,
-  // not the fixed guide — null when no box exists, in which case
-  // no zones render at all (a zone in the wrong place is worse
-  // than no zone). The corner dots stay on the guide: they are the
-  // target the kid frames into, not annotations on the card.
-  const zoneRects = zoneAnchor ? zoneDisplayRects(zoneAnchor) : null;
+  // The outline IS the progress language (lib/outline.js): border
+  // segments fill gold as the SERVER confirms each piece, and
+  // only the missing piece's segment pulses. Live framing quality
+  // never fills — it may only dim/brighten the guide via the
+  // guidance line, which appears ONLY when the app is genuinely
+  // blocked; when the number is the missing piece and nothing
+  // blocks, the line names the close-up instead.
+  const segments = outlineSegments({ locked: locked || null, stage: stage || null });
+  const line = guidance || (stage === 'number' ? 'Close-up: bottom number corner' : null);
 
   return (
     <div className="camPreview">
       <video ref={videoRef} playsInline muted autoPlay className="camVideo" onClick={focusAt} />
-      <div className="camPercent" aria-hidden="true">{zoneDisplay.percent}%</div>
-      <div ref={outlineRef} className={`camOutline${stage === 'number' ? ' numberStage' : ''}`}>
+      <div ref={outlineRef} className={`camOutline${outlineClasses(segments) ? ' ' + outlineClasses(segments) : ''}`}>
         <span className="camCornerDot camDotBL" />
         <span className="camCornerDot camDotBR" />
       </div>
-      {zoneRects ? (
-        <div className="camZoneLayer" aria-hidden="true">
-          {ZONES.map((z) => {
-            const dz = zoneDisplay.zones[z.key];
-            const r = zoneRects[z.key];
-            return (
-              <span
-                key={z.key}
-                className={`camZone camZone${z.key} ${dz.state}${dz.pulse ? ' camZonePulse' : ''}`}
-                style={{ left: r.left, top: r.top, width: r.width, height: r.height }}
-              />
-            );
-          })}
-        </div>
-      ) : null}
       {focusRing ? (
         <span key={focusRing.id} className="camFocusRing" aria-hidden="true" style={{ left: focusRing.x, top: focusRing.y }} />
       ) : null}
-      {guidance ? <div className="camChip">{guidance}</div> : null}
+      {line ? <div className="camChip">{line}</div> : null}
       <div className="camBar">
         <button className="camShutter" onClick={snapNow} aria-label="Take a picture">
           <IconCamera size={30} /> SNAP
@@ -393,17 +350,6 @@ export default function CameraPreview({ stage, locked, onCapture, onClose, onFal
         </button>
       </div>
       <button className="camPicker" onClick={onFallback}>Use photo picker instead</button>
-      <div className="camSteady" aria-hidden="true">
-        {[0, 1, 2].map((i) => {
-          const fill = steadyDotFill(steadyProgress, i);
-          return (
-            <span
-              key={i}
-              style={fill > 0 ? { background: `linear-gradient(to top, #ffcb05 ${fill * 100}%, rgba(255, 255, 255, 0.35) ${fill * 100}%)` } : undefined}
-            />
-          );
-        })}
-      </div>
     </div>
   );
 }

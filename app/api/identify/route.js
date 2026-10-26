@@ -39,6 +39,17 @@ export async function POST(req) {
     // already a tight high-quality card crop — the pipeline must NOT
     // re-encode it (that second JPEG pass crushed text reads).
     const clientCropped = form.get('cropped') === '1';
+    // RESET (2026-10-25): the client marks continuation shots. corner
+    // = this shot is a close-up of the bottom number corner (the
+    // missing piece): the server runs corner-first number extraction
+    // and merges with the banked evidence. fast = picture+name are
+    // already banked and only the number is missing: the server
+    // skips the full re-read and goes straight to targeted
+    // number-corner extraction, falling back to the normal path
+    // when the number does not resolve. Neither flag can create a
+    // choice on its own — the confidence gate still decides.
+    const cornerCloseup = form.get('corner') === '1';
+    const fastNumber = form.get('fast') === '1';
     // Hard deadline comfortably inside the platform cap (maxDuration 60):
     // if the pipeline is having a slow day, answer with structured JSON
     // the client can act on instead of dying as a platform 504 page
@@ -56,6 +67,7 @@ export async function POST(req) {
       // whenever the picture path is unavailable or has no match.
       return identifyPhoto(buffer, {
         deadlineAt: t0 + DEADLINE_MS - 4000, priorOcr, clientCropped,
+        cornerCloseup, fastNumber,
         onPartial: (snap) => { latestPartial = snap; },
       });
     })();
@@ -66,10 +78,11 @@ export async function POST(req) {
     clearTimeout(timer);
     if (!done) {
       // Deadline, not failure: a slow lane degrades to the SAME
-      // guided retake a normal safe-fail returns (progress ring +
+      // guided retake a normal safe-fail returns (banked progress +
       // missing-piece hint + second-photo offer), never to a generic
-      // error. The kid flow sees the ring and hears "take the picture
-      // again"; failureKind is grown-ups diagnostics only.
+      // error. The kid flow sees the outline fill on the next shot
+      // and hears "take the picture again"; failureKind is
+      // grown-ups diagnostics only.
       return NextResponse.json({
         ...deadlineRetake(latestPartial, NUMBER_CORNER_HINT),
         detail: `Identification exceeded ${DEADLINE_MS}ms budget`,
@@ -88,13 +101,13 @@ export async function POST(req) {
     // The client words that differently from "couldn't read it".
     const topNum = (numberGuesses && numberGuesses[0]) || numberGuess;
     const stumped = !candidates.length && !!topNum && (topNum.votes || 0) >= 2;
-    // Progressive capture: on a non-confident result, summarize which
+    // Banked progress: on a non-confident result, summarize which
     // signals this photo already banked (picture / name / number) and
     // which single piece the next guided shot should aim at. This is
     // evidence reporting only — it never creates a choice; only the
-    // confidence gate above can do that. The client shows it as a
-    // wordless progress ring and re-opens the preview with the
-    // missing piece highlighted, instead of looping on generic
+    // confidence gate above can do that. The client re-opens the
+    // preview with the banked pieces as outline fill and the
+    // missing piece's segment pulsing, instead of looping on generic
     // retakes. Confident responses carry no progress (nothing to
     // complete).
     const progress = confident ? null : summarizeProgress({ candidates, pict });
