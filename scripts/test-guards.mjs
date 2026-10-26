@@ -3,6 +3,7 @@
 // two-signal enforcement, high-price tripwire, set-total agreement.
 import {
   signalCount, enforceTwoSignal, median, isPriceOutlier, totalAgrees,
+  hasIndistinguishableRival,
 } from '../lib/guards.js';
 
 const cand = (id, name, extra = {}) => ({
@@ -68,6 +69,20 @@ check('cheap top vs expensive rivals does NOT trip', isPriceOutlier(5, [99]), fa
 check('no rivals does NOT trip', isPriceOutlier(899.99, []), false);
 check('null price does NOT trip', isPriceOutlier(null, [99]), false);
 check('null rival prices ignored', isPriceOutlier(899.99, [null, 99]), true);
+
+// --- hasIndistinguishableRival (Evolutions 11/108 cropsim, 2026-10-26) ---
+// Pool entries carry { entry: { name }, sim }. A same-name rival
+// within 0.03 of the candidate's sim makes art non-discriminating.
+const poolCand = (name, sim) => ({ entry: { name }, sim });
+{
+  const p = poolCand('Charizard', 0.8601);
+  const pool = [p, poolCand('Charizard', 0.8518), poolCand('Pikachu', 0.9)];
+  check('same-name rival within 0.03 = rivaled', hasIndistinguishableRival(p, pool), true);
+  check('different-name high sim is NOT a rival', hasIndistinguishableRival(poolCand('Pikachu', 0.9), [p, poolCand('Charizard', 0.8518)]), false);
+  check('same-name rival outside 0.03 = NOT rivaled', hasIndistinguishableRival(poolCand('Charizard', 0.9), [poolCand('Charizard', 0.85)]), false);
+  check('single-member pool = NOT rivaled', hasIndistinguishableRival(p, [p]), false);
+  check('exact 0.03 boundary counts as rivaled', hasIndistinguishableRival(poolCand('Charizard', 0.86), [poolCand('Charizard', 0.83)]), true);
+}
 
 // --- totalAgrees ---
 check('108 vs 108 agrees', totalAgrees('108', '108'), true);

@@ -25,6 +25,14 @@ const get = (flag, dflt) => {
 };
 const BASE = get('--base', 'http://localhost:3100');
 const ONLY = (get('--only', '') || '').split(',').map((s) => s.trim()).filter(Boolean);
+// --log <file>: append each row synchronously as it lands, so a long
+// run stays observable (piped node stdout block-buffers and a killed
+// run otherwise leaves an empty log).
+const LOG = get('--log', '');
+const logRow = (row) => {
+  console.log(row);
+  if (LOG) { try { fs.appendFileSync(LOG, row + '\n'); } catch { /* ignore */ } }
+};
 const M = path.join(process.env.HOME, 'workspace/user/media_library/image');
 const REPO = path.resolve('.');
 
@@ -108,8 +116,8 @@ for (const t of TESTS) {
       retakes++;
       row = `${t.name} [${l.lane}]: ERROR ${String(err && err.message || err)}`;
     }
-    console.log(row);
+    logRow(row);
   }
 }
-console.log(`\nTOTAL ${total}: first-shot ${firstShot}, retakes ${retakes}, WRONG TOPS ${wrong}`);
+logRow(`\nTOTAL ${total}: first-shot ${firstShot}, retakes ${retakes}, WRONG TOPS ${wrong}`);
 process.exit(wrong ? 2 : 0);
