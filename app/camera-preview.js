@@ -1,6 +1,9 @@
-// Live guided capture (browser only — the native shell keeps using
-// the camera plugin, which has no preview surface without a new
-// native plugin; see the report for that option).
+// Live guided capture — runs in a browser AND inside the native
+// shell, where getUserMedia is served by the platform WebView
+// (Capacitor's Android bridge grants VIDEO_CAPTURE from the app's
+// CAMERA permission; iOS WKWebView from NSCameraUsageDescription).
+// The native Camera plugin is only a fallback (see app/page.js):
+// its capture intent can resolve to Google Lens on some phones.
 //
 // What it does, kid-simple:
 //   - A video preview with a card-shaped outline (63:88, the real
@@ -18,8 +21,10 @@
 //     separable, so it never blocks anything).
 //
 // Any failure (no camera, denied permission, getUserMedia missing)
-// calls onFallback() and the parent opens the file picker instead —
+// calls onAutoFail() when provided (the parent retries via the
+// native plugin in the shell, else the picker) or onFallback() —
 // the preview can never strand a kid without a way to take a photo.
+// The "Use photo picker instead" button always calls onFallback().
 
 'use client';
 
@@ -54,7 +59,7 @@ function frameDiff(a, b) {
   return sum / (n * 3);
 }
 
-export default function CameraPreview({ onCapture, onClose, onFallback }) {
+export default function CameraPreview({ onCapture, onClose, onFallback, onAutoFail }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const sampleRef = useRef(null);
@@ -115,8 +120,9 @@ export default function CameraPreview({ onCapture, onClose, onFallback }) {
         }, SAMPLE_MS);
       } catch {
         // No camera / denied / no API: never strand the kid — the
-        // parent opens the file picker instead.
-        if (!cancelled) onFallback();
+        // parent retries via the native plugin in the shell, else
+        // opens the file picker.
+        if (!cancelled) (onAutoFail || onFallback)();
       }
     })();
     return () => {

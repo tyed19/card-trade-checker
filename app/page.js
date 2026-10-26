@@ -15,6 +15,7 @@ import * as store from '../lib/store';
 import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, fmtPriceLine, priceCoverage, tradeIsUnpriceable, FAIR_BAND } from '../lib/logic';
 import { decodePayload } from '../lib/links';
 import { takeNativePhoto, verdictHaptic, isNative } from '../lib/native';
+import { captureEntry, afterPreviewAutoFail } from '../lib/capture-route';
 import { prepareForUpload, assessBitmap } from '../lib/capture';
 import CameraPreview from './camera-preview';
 
@@ -217,13 +218,16 @@ export default function Home() {
   // The hidden file input is shared by normal and second-photo picks:
   // this flag tells its onChange which kind the next pick is.
   const secondPhotoPick = useRef({ mine: false, theirs: false });
-  // Live guided preview (capture overhaul): null, or { side, second }.
-  // Browser only — the native shell keeps the camera plugin path.
+  // Live guided preview (native camera preview): null, or { side, second }.
+  // The preview runs wherever getUserMedia exists — including inside
+  // the native shell (see lib/capture-route.js). The native Camera
+  // plugin is strictly a fallback: its ACTION_IMAGE_CAPTURE intent
+  // can resolve to Google Lens on some Android phones.
   const [preview, setPreview] = useState(null);
-  const previewAvailable = () => {
+  const entryPath = () => {
     try {
-      return !isNative() && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-    } catch { return false; }
+      return captureEntry({ isNative: isNative(), hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) });
+    } catch { return 'picker'; }
   };
 
   // ---- Phase 3 state: views, per-side kid assignment, pickers ----
@@ -352,13 +356,17 @@ export default function Home() {
   // input exactly as before. A cancelled camera is a no-op, never a
   // fallback (the kid just changed their mind).
   async function onPhotoButton(side) {
-    const shot = await takeNativePhoto();
-    if (shot === 'cancelled') return;
-    if (shot) { onPhoto(side, shot); return; }
-    // Browser with a camera: guided live preview (outline, steady
-    // auto-capture) instead of the bare file picker. Any preview
-    // failure falls back to the picker via onPreviewFallback.
-    if (previewAvailable()) { setPreview({ side, second: false }); return; }
+    // Guided preview first everywhere it exists — inside the shell
+    // this keeps capture in-app instead of handing off to the phone's
+    // camera app (or Lens). Native plugin only when the preview
+    // can't run; picker is terminal.
+    const path = entryPath();
+    if (path === 'preview') { setPreview({ side, second: false }); return; }
+    if (path === 'native') {
+      const shot = await takeNativePhoto();
+      if (shot === 'cancelled') return;
+      if (shot) { onPhoto(side, shot); return; }
+    }
     fileRefs[side].current && fileRefs[side].current.click();
   }
 
@@ -371,8 +379,26 @@ export default function Home() {
 
   function onPreviewFallback() {
     if (!preview) return;
-    const { side } = preview;
+    const { side, second } = preview;
     setPreview(null);
+    if (second) secondPhotoPick.current[side] = true;
+    fileRefs[side].current && fileRefs[side].current.click();
+  }
+
+  // The preview itself failed (no camera, denied permission, no API):
+  // in the shell, retry via the native plugin before giving up to the
+  // picker; in a browser the picker is the only fallback. A plugin
+  // cancel means the kid backed out — never open the picker on top.
+  async function onPreviewAutoFail() {
+    if (!preview) return;
+    const { side, second } = preview;
+    setPreview(null);
+    if (afterPreviewAutoFail({ isNative: isNative() }) === 'native') {
+      const shot = await takeNativePhoto();
+      if (shot === 'cancelled') return;
+      if (shot) { onPhoto(side, shot, second); return; }
+    }
+    if (second) secondPhotoPick.current[side] = true;
     fileRefs[side].current && fileRefs[side].current.click();
   }
 
@@ -382,13 +408,13 @@ export default function Home() {
   // fail (see the secondPhoto flag on the retake state) — the happy
   // path never sees this button.
   async function onSecondPhoto(side) {
-    const shot = await takeNativePhoto();
-    if (shot === 'cancelled') return;
-    if (shot) { onPhoto(side, shot, true); return; }
-    // The second shot opens straight into the guided preview when
-    // available: one tap, tilt guidance visible, no restart of the
-    // flow — the merge flag rides on the preview capture.
-    if (previewAvailable()) { setPreview({ side, second: true }); return; }
+    const path = entryPath();
+    if (path === 'preview') { setPreview({ side, second: true }); return; }
+    if (path === 'native') {
+      const shot = await takeNativePhoto();
+      if (shot === 'cancelled') return;
+      if (shot) { onPhoto(side, shot, true); return; }
+    }
     secondPhotoPick.current[side] = true;
     fileRefs[side].current && fileRefs[side].current.click();
   }
@@ -1096,6 +1122,7 @@ export default function Home() {
           onCapture={onPreviewCapture}
           onClose={() => setPreview(null)}
           onFallback={onPreviewFallback}
+          onAutoFail={onPreviewAutoFail}
         />
       ) : null}
     </main>

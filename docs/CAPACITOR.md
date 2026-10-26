@@ -144,3 +144,31 @@ Everything below is account-side; the code and projects are ready.
 4. **Public-launch gates** (unchanged from the checklist, not beta
    blockers): attorney's USPTO clearance, licensed price-data source,
    seller entity for store tax/banking.
+
+## Guided live preview inside the shell (native camera preview)
+
+The capture preview (`app/camera-preview.js`) runs wherever
+`getUserMedia` exists — including inside both installed shells — so
+capture stays in-app instead of handing off to the phone's camera
+app. The routing lives in `lib/capture-route.js`: preview first,
+native Camera plugin only as fallback, photo picker terminal.
+
+Platform facts that make this work (verified against Capacitor 8):
+
+- **Android:** `BridgeWebChromeClient.onPermissionRequest` maps a
+  WebView `VIDEO_CAPTURE` request to `Manifest.permission.CAMERA`
+  and grants the stream when allowed. The app manifest MUST declare
+  the permission (`android/app/src/main/AndroidManifest.xml`) or the
+  request auto-denies — the camera plugin's own manifest does not
+  declare it. A manifest change means a NEW debug APK: install it
+  over the old one (never uninstall — binders live on-device).
+- **iOS:** WKWebView serves `getUserMedia` from
+  `NSCameraUsageDescription` (in `Info.plist`) over the HTTPS remote
+  URL. No new TestFlight build is needed for web-only changes: the
+  remote-URL shell picks them up on next open.
+
+Why the plugin is not the primary path: `Camera.getPhoto` with
+`CameraSource.Camera` fires an `ACTION_IMAGE_CAPTURE` intent, which
+on some Android phones resolves to Google Lens instead of the camera
+— the detour Tye hit in the field. If the user denies the in-shell
+camera permission, the fallback chain is plugin, then picker.

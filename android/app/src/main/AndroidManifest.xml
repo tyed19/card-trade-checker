@@ -32,4 +32,14 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- CAMERA: required for the guided live preview inside the
+         shell. Capacitor's Android bridge grants WebView getUserMedia
+         video requests from this permission (BridgeWebChromeClient
+         VIDEO_CAPTURE -> CAMERA). Without the declaration the request
+         auto-denies and capture falls back to the camera intent,
+         which on some phones resolves to Google Lens. The camera
+         plugin's own manifest does NOT declare it, and the shell
+         previously worked without it only by handing capture off to
+         another app. -->
+    <uses-permission android:name="android.permission.CAMERA" />
 </manifest>
