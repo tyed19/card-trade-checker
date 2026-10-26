@@ -7,7 +7,7 @@
 // guesses outrank full-frame guesses, and a fast-path candidate needs
 // FULL number + set-total agreement AND the banked name agreeing.
 // A close-up alone never creates a choice.
-import { mergeCornerGuesses, selectFastCandidates } from '../lib/hybrid.js';
+import { mergeCornerGuesses, selectFastCandidates, applyCornerShotRule } from '../lib/hybrid.js';
 
 let pass = 0, fail = 0;
 const check = (label, got, want) => {
@@ -75,6 +75,48 @@ check('bare corner guess never qualifies',
 // 12. A wrong-number candidate never qualifies, even with a hot name.
 check('wrong number never qualifies',
   selectFastCandidates([c('sv05-203', 'Iron Leaves ex', '203', '162', 0.99)], [g(25, 162)]).length, 0);
+
+// ---- applyCornerShotRule ----
+// The rule demotes in place; the helper below reports survivors.
+const ruled = (list, guesses) => {
+  const copy = list.map((x) => ({ ...x }));
+  applyCornerShotRule(copy, guesses);
+  return copy.filter((x) => x.displayable).map((x) => x.id);
+};
+// 13. Banette case (production, JP Charizard strip): a glare-misread
+// corner number (001/100, total agreement) with junk prior names
+// must NOT stay displayable — no name agreement, no offer.
+check('corner rule demotes wrong-Pokemon number crown',
+  ruled([
+    { id: 'banette-1', name: 'Banette', number: '1', displayable: true, numberMatch: true, nameSim: 0.22 },
+    { id: 'dusknoir-1', name: 'Dusknoir', number: '1', displayable: true, numberMatch: true, nameSim: 0.19 },
+  ], ['id yy moan', 'ON ad NP']), []);
+// 14. Iron Leaves case: the true print keeps its offer — full number
+// match AND the banked prior name agreeing (OCR read "Iron eaves").
+check('corner rule keeps number+name agreement',
+  ruled([
+    { id: 'sv05-25', name: 'Iron Leaves ex', number: '25', displayable: true, numberMatch: true, nameSim: 0 },
+  ], ['Iron eaves Ei a']), ['sv05-25']);
+// 15. A candidate's own nameSim counts even with no prior names.
+check('corner rule keeps own nameSim agreement',
+  ruled([
+    { id: 'sv05-25', name: 'Iron Leaves ex', number: '25', displayable: true, numberMatch: true, nameSim: 0.86 },
+  ], []), ['sv05-25']);
+// 16. No full number match, hot name or not: a corner fragment's art
+// or bare number never crowns on its own.
+check('corner rule demotes art-only candidate',
+  ruled([
+    { id: 'sv05-203', name: 'Iron Leaves ex', number: '203', displayable: true, numberMatch: false, nameSim: 0.99, pictSim: 0.85 },
+  ], ['Iron Leaves ex']), []);
+check('corner rule demotes bare-number candidate',
+  ruled([
+    { id: 'svp-180', name: 'Dialga ex', number: '180', displayable: true, numberMatch: false, bareNumMatch: true, nameSim: 0.95 },
+  ], ['Dialga ex']), []);
+// 17. Non-displayable candidates are untouched (no resurrection).
+check('corner rule never resurrects',
+  ruled([
+    { id: 'raichu-98', name: 'Raichu ex', number: '98', displayable: false, numberMatch: true, nameSim: 0.9 },
+  ], ['Raichu ex']), []);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

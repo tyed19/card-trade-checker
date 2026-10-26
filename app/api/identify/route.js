@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getStageStats } from '../../../lib/ocr';
 import { findCandidates } from '../../../lib/identify';
-import { identifyPhoto, NUMBER_CORNER_HINT } from '../../../lib/hybrid';
+import { identifyPhoto, NUMBER_CORNER_HINT, applyCornerShotRule } from '../../../lib/hybrid';
 import { summarizeProgress, deadlineRetake } from '../../../lib/progress';
 
 export const runtime = 'nodejs';
@@ -92,6 +92,20 @@ export async function POST(req) {
     }
     const { reading, candidates, pict, zone, retakeHint, secondPhoto } = done;
     const { nameGuess, nameGuesses, numberGuess, numberGuesses, attackGuesses, hpGuess, debug } = reading || {};
+    // RESET corner-shot rule (single site, covers every pipeline
+    // path): a corner close-up's fragment frame must never crown
+    // on a number alone — the candidate also needs the banked name
+    // agreeing (see applyCornerShotRule). Applied BEFORE the
+    // confidence verdict below, so a demoted offer becomes the
+    // honest retake instead. Full-card shots skip this entirely.
+    if (cornerCloseup) {
+      const cornerNames = [
+        ...((priorOcr && priorOcr.nameGuesses) || []),
+        priorOcr && priorOcr.name,
+        ...(nameGuesses || []),
+      ].filter(Boolean);
+      applyCornerShotRule(candidates, cornerNames);
+    }
     // Confidence gate verdict: at least one candidate carries structural
     // evidence (see applyGate in lib/identify.js). When none does, the
     // client shows the retake state and never a card picture.
