@@ -130,6 +130,27 @@ input[type='file'] { display: none; }
 }
 .camNotice button.camNoticeX { background: transparent; color: #14213d; padding: 8px; font-size: 18px; }
 
+/* Progressive capture: the number stage grows and pulses the two
+   bottom-edge dots — where the collector number lives — so the kid
+   frames the number corner, without a word of instruction. */
+.camOutline.numberStage .camCornerDot {
+  width: 26px; height: 26px; bottom: -13px;
+  animation: camDotPulse 1s ease-in-out infinite;
+}
+@keyframes camDotPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+}
+
+/* Progressive capture ring on the trade screen: three dots for
+   picture, name, number — gold is banked, hollow is still missing.
+   The button reuses the second-photo style (same big tap target,
+   teal, distinct from the yellow TAKE A PICTURE button). */
+.progressBlock { text-align: center; margin: 4px 0 10px; }
+.progressDots { display: flex; gap: 10px; justify-content: center; margin: 6px 0 10px; }
+.progressDots span { width: 16px; height: 16px; border-radius: 50%; background: rgba(20, 33, 61, 0.18); border: 2px solid rgba(20, 33, 61, 0.35); }
+.progressDots span.on { background: #ffcb05; border-color: #c79a00; }
+
 .choices { text-align: center; }
 .choices .q { font-size: clamp(20px, 6vw, 26px); font-weight: 900; margin: 10px 0; }
 .choiceGrid { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }

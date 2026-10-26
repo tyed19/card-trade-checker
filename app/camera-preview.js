@@ -22,6 +22,12 @@
 //   - A soft shine chip when the frame looks very washed out
 //     (advisory only — single-frame glare detection is weakly
 //     separable, so it never blocks anything).
+//   - Progressive capture (optional `stage` prop): when the previous
+//     shot banked everything except one piece, the outline
+//     highlights just that piece — for the 'number' stage the two
+//     bottom-edge dots grow and pulse, wordlessly pointing at the
+//     collector-number corner. Other stages leave the outline
+//     unchanged (the shine chip already covers glare live).
 //
 // Any failure (no camera, denied permission, getUserMedia missing)
 // calls onAutoFail() when provided (the parent retries via the
@@ -61,7 +67,7 @@ function frameDiff(a, b) {
   return sum / (n * 3);
 }
 
-export default function CameraPreview({ onCapture, onClose, onFallback, onAutoFail }) {
+export default function CameraPreview({ stage, onCapture, onClose, onFallback, onAutoFail }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const sampleRef = useRef(null);
@@ -197,7 +203,7 @@ export default function CameraPreview({ onCapture, onClose, onFallback, onAutoFa
   return (
     <div className="camPreview">
       <video ref={videoRef} playsInline muted autoPlay className="camVideo" />
-      <div className="camOutline">
+      <div className={`camOutline${stage === 'number' ? ' numberStage' : ''}`}>
         <span className="camCornerDot camDotBL" />
         <span className="camCornerDot camDotBR" />
       </div>

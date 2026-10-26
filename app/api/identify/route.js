@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getStageStats } from '../../../lib/ocr';
 import { findCandidates } from '../../../lib/identify';
 import { identifyPhoto } from '../../../lib/hybrid';
+import { summarizeProgress } from '../../../lib/progress';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -74,10 +75,21 @@ export async function POST(req) {
     // The client words that differently from "couldn't read it".
     const topNum = (numberGuesses && numberGuesses[0]) || numberGuess;
     const stumped = !candidates.length && !!topNum && (topNum.votes || 0) >= 2;
+    // Progressive capture: on a non-confident result, summarize which
+    // signals this photo already banked (picture / name / number) and
+    // which single piece the next guided shot should aim at. This is
+    // evidence reporting only — it never creates a choice; only the
+    // confidence gate above can do that. The client shows it as a
+    // wordless progress ring and re-opens the preview with the
+    // missing piece highlighted, instead of looping on generic
+    // retakes. Confident responses carry no progress (nothing to
+    // complete).
+    const progress = confident ? null : summarizeProgress({ candidates, pict });
     return NextResponse.json({
       ok: true,
       confident,
       stumped,
+      progress,
       ocr: {
         name: nameGuess || '',
         nameGuesses: nameGuesses || [],

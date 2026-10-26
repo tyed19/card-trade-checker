@@ -160,7 +160,7 @@ function playClip(key, fallbackText) {
   });
 }
 
-const emptySide = () => ({ cards: [], choices: null, busy: false, status: '', hint: null });
+const emptySide = () => ({ cards: [], choices: null, busy: false, status: '', hint: null, progress: null });
 
 // Upload prep lives in lib/capture.js now (capture overhaul): crop to
 // the card and upload the crop at high quality, with a pre-submit
@@ -218,11 +218,15 @@ export default function Home() {
   // The hidden file input is shared by normal and second-photo picks:
   // this flag tells its onChange which kind the next pick is.
   const secondPhotoPick = useRef({ mine: false, theirs: false });
-  // Live guided preview (native camera preview): null, or { side, second }.
-  // The preview runs wherever getUserMedia exists — including inside
-  // the native shell (see lib/capture-route.js). The native Camera
-  // plugin is strictly a fallback: its ACTION_IMAGE_CAPTURE intent
-  // can resolve to Google Lens on some Android phones.
+  // Live guided preview (native camera preview): null, or
+  // { side, second, stage }. The preview runs wherever getUserMedia
+  // exists — including inside the native shell (see
+  // lib/capture-route.js). The native Camera plugin is strictly a
+  // fallback: its ACTION_IMAGE_CAPTURE intent can resolve to Google
+  // Lens on some Android phones. `stage` is progressive capture's
+  // missing piece ('number' | 'tilt' | 'straight' | null): the
+  // preview highlights just that piece (the number stage grows and
+  // pulses the two bottom-edge dots) and is otherwise unchanged.
   const [preview, setPreview] = useState(null);
   // Camera-failure notice: set when the preview AND (in the shell)
   // the native-plugin fallback both missed, so the failure is named
@@ -427,10 +431,32 @@ export default function Home() {
   // the upload carries the first photo's OCR summary so the server
   // merges both photos' evidence. Only ever offered after a hard
   // fail (see the secondPhoto flag on the retake state) — the happy
-  // path never sees this button.
+  // path never sees this button. Progressive capture supersedes it
+  // whenever a progress summary exists (see onProgressPhoto).
   async function onSecondPhoto(side) {
     const path = entryPath();
     if (path === 'preview') { setCamNotice(null); setPreview({ side, second: true }); return; }
+    if (path === 'native') {
+      const shot = await takeNativePhoto();
+      if (shot === 'cancelled') return;
+      if (shot) { onPhoto(side, shot, true); return; }
+    }
+    secondPhotoPick.current[side] = true;
+    fileRefs[side].current && fileRefs[side].current.click();
+  }
+
+  // Progressive capture: the next guided shot for the side's missing
+  // signal. Same camera path as the second-photo button — and the
+  // same evidence rule: the upload carries the banked OCR summary
+  // (second: true), so the server unions text evidence across shots
+  // and the ring fills in instead of restarting. The preview gets
+  // the missing stage so it can highlight just that piece. The
+  // picker escape and manual SNAP work at every stage, exactly as
+  // on a normal preview session.
+  async function onProgressPhoto(side) {
+    const stage = (sides[side].progress && sides[side].progress.missing) || null;
+    const path = entryPath();
+    if (path === 'preview') { setPreview({ side, second: true, stage }); return; }
     if (path === 'native') {
       const shot = await takeNativePhoto();
       if (shot === 'cancelled') return;
@@ -453,7 +479,11 @@ export default function Home() {
     // changes nothing yet, and a failed/stumped photo must not throw
     // away a good valuation. It clears in cardsChanged() the moment
     // a card actually lands on (or leaves) a side.
-    setSide(side, { busy: true, choices: null, status: 'Looking at your card…', hint: null, secondPhoto: false });
+    // A fresh scan (not a progressive continuation) restarts the
+    // ring: the new photo's own result will set it again. A
+    // progressive shot keeps the last ring until its response lands,
+    // so the kid never watches banked progress blink away mid-scan.
+    setSide(side, { busy: true, choices: null, status: 'Looking at your card…', hint: null, secondPhoto: false, ...(withPrior ? {} : { progress: null }) });
     playClip('looking', 'Looking at your card');
     try {
       // Crop-first upload (capture overhaul) + pre-submit blur gate:
@@ -499,13 +529,28 @@ export default function Home() {
         // Status stays EMPTY here: the choices block renders its own
         // "Tap your card!" heading — setting it here too printed the
         // heading twice (the doubled heading in the user's screenshot).
-        setSide(side, { busy: false, choices, status: '', hint: null, secondPhoto: false });
+        setSide(side, { busy: false, choices, status: '', hint: null, secondPhoto: false, progress: null });
         playClip('tap', 'Tap your card!');
       } else if (json.ok && json.stumped) {
         // The photo read fine (a solid number) but the card book came
-        // back empty — don't blame the kid's photo for that.
-        setSide(side, { busy: false, choices: null, status: 'That one stumped me! One more try!', hint: json.retakeHint || null, secondPhoto: json.secondPhoto === true });
+        // back empty — don't blame the kid's photo for that. No
+        // progressive ring here: another angle cannot fix the book.
+        setSide(side, { busy: false, choices: null, status: 'That one stumped me! One more try!', hint: json.retakeHint || null, secondPhoto: json.secondPhoto === true, progress: null });
         playClip('stumped', 'That one stumped me! Try again!');
+      } else if (json.ok && json.progress) {
+        // Progressive capture: this shot banked some signals but not
+        // enough for a confident ID. Do NOT loop on generic retakes:
+        // the ring shows what is banked, the next guided shot aims
+        // at exactly the missing piece, and the moment the banked
+        // signals satisfy the existing gate the choices branch above
+        // fires on its own — no extra tap. The old second-photo
+        // button is suppressed while the ring is up (the progressive
+        // shot IS the second shot, with stage guidance). The
+        // grown-ups hint line stays: the ring is the kid's signal,
+        // the hint is the grown-ups' explanation of the same stage.
+        // Safety is untouched: the ring never creates a choice.
+        setSide(side, { busy: false, choices: null, status: '', hint: json.retakeHint || null, secondPhoto: false, progress: json.progress });
+        playClip('takeAgain', 'OK! Take the picture again');
       } else if (json.ok) {
         setSide(side, { busy: false, choices: null, status: 'I could not read that one. Flat + bright, try again!', hint: json.retakeHint || null, secondPhoto: json.secondPhoto === true });
         playClip('unreadable', 'I could not read that one. Try again, flat and bright!');
@@ -523,16 +568,17 @@ export default function Home() {
   function pickChoice(side, cand) {
     const s = sides[side];
     if (!s.choices) return;
-    setSide(side, { cards: [...s.cards, cand], choices: null, status: 'Got it!', hint: null, secondPhoto: false });
+    setSide(side, { cards: [...s.cards, cand], choices: null, status: 'Got it!', hint: null, secondPhoto: false, progress: null });
     cardsChanged(); // append: existing cards/kid assignment stay put
     playClip('gotIt', 'Got it!');
   }
 
   function noneOfThese(side) {
     // The rejected choices came from this photo's evidence — it must
-    // not ride along into a second-photo merge.
+    // not ride along into a second-photo merge, and the ring built
+    // from that evidence goes with it.
     lastOcrRef.current[side] = null;
-    setSide(side, { choices: null, status: 'OK! Take the picture again!', hint: null, secondPhoto: false });
+    setSide(side, { choices: null, status: 'OK! Take the picture again!', hint: null, secondPhoto: false, progress: null });
     playClip('takeAgain', 'OK! Take the picture again');
   }
 
@@ -821,7 +867,24 @@ export default function Home() {
         </button>
         <div className="status">{s.status}</div>
         {s.hint ? <div className="retakeHint">{s.hint}</div> : null}
-        {s.secondPhoto && !s.busy && !(s.choices && s.choices.length) ? (
+        {s.progress && !s.busy && !(s.choices && s.choices.length) ? (
+          <div className="progressBlock">
+            {/* Wordless enrollment ring: picture, name, number — gold
+                is banked, hollow is still missing. The button below
+                re-opens the preview aimed at the missing piece; the
+                moment the banked signals satisfy the gate, choices
+                appear on their own and this block clears. */}
+            <div className="progressDots" aria-label="Picture progress">
+              <span className={s.progress.picture ? 'on' : ''} />
+              <span className={s.progress.name ? 'on' : ''} />
+              <span className={s.progress.number ? 'on' : ''} />
+            </div>
+            <button className="secondPhotoBtn" onClick={() => onProgressPhoto(side)}>
+              <IconCamera size={26} /> Next picture
+            </button>
+          </div>
+        ) : null}
+        {s.secondPhoto && !s.progress && !s.busy && !(s.choices && s.choices.length) ? (
           <button className="secondPhotoBtn" onClick={() => onSecondPhoto(side)}>
             <IconCamera size={26} /> Try a tilted photo
           </button>
@@ -1149,6 +1212,7 @@ export default function Home() {
       )}
       {preview ? (
         <CameraPreview
+          stage={preview.stage || null}
           onCapture={onPreviewCapture}
           onClose={() => setPreview(null)}
           onFallback={onPreviewFallback}
