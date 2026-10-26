@@ -124,5 +124,53 @@ const highBoxRect = coverBoxDisplayRect({
 });
 check('box display rect: high card lands high, not on the guide bottom', Math.abs(highBoxRect.top - 42) < 5 && Math.abs(highBoxRect.top + highBoxRect.height - 464) < 5);
 
+// --- REGRESSION (bottom overshoot, iPhone, 2026-10-25, third
+// screenshot): Iron Leaves ex on dark wood — the row-profile
+// detector ran the box to the frame bottom (a bright wood
+// highlight blip near the bottom merged into the span), so the
+// number zone detached to the screen bottom and a 'corners' chip
+// fired on a fully visible card. Synthetic landscape stream
+// (160x90 sample, 1920x1080 stream): card rows 0.115-0.615,
+// central 23% of width, sparse name strip, solid art + text,
+// dark wood table, optional blip at rows 0.85-0.885.
+function landscapeStreamFrame(blip) {
+  const W = 160, H = 90, data = new Uint8ClampedArray(W * H * 4);
+  for (let i = 0; i < W * H; i++) { data[i * 4] = 60; data[i * 4 + 1] = 42; data[i * 4 + 2] = 28; data[i * 4 + 3] = 255; }
+  const paint = (y0, y1, x0, x1, rgb, frac) => {
+    let seed = 12345;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      if (rnd() < frac) { const i = (y * W + x) * 4; data[i] = rgb[0]; data[i + 1] = rgb[1]; data[i + 2] = rgb[2]; }
+    }
+  };
+  const cardX0 = Math.floor(0.385 * W), cardX1 = Math.floor(0.615 * W);
+  const y = (f) => Math.floor(f * H);
+  paint(y(0.115), y(0.20), cardX0, cardX1, [120, 200, 90], 0.05); // sparse name strip
+  paint(y(0.20), y(0.47), cardX0, cardX1, [220, 60, 60], 0.55); // art
+  paint(y(0.47), y(0.615), cardX0, cardX1, [90, 150, 90], 0.30); // text
+  if (blip) paint(y(0.85), y(0.885), Math.floor(0.2 * W), Math.floor(0.8 * W), [190, 150, 100], 0.35);
+  return data;
+}
+const TRUE_BOTTOM = 0.615;
+const blipBox = analyzeCardPixels(landscapeStreamFrame(true), 160, 90, 1920, 1080);
+const noBlipBox = analyzeCardPixels(landscapeStreamFrame(false), 160, 90, 1920, 1080);
+check('landscape stream + wood blip: box found, ends at the real bottom, NOT the frame bottom', blipBox && blipBox.t + blipBox.h > 0.55 && blipBox.t + blipBox.h < 0.75);
+check('landscape stream, no blip: same box (the blip must not move it)', noBlipBox && blipBox && Math.abs((noBlipBox.t + noBlipBox.h) - (blipBox.t + blipBox.h)) < 0.02);
+check('number zone of such a box sits on the real bottom corner, not the table', blipBox && (() => {
+  const zb = blipBox.t + blipBox.h, zt = zb - 0.1 * blipBox.h;
+  return zt < TRUE_BOTTOM && zb < 0.75;
+})());
+// The overstretch rule: a rows-mode strip that touches the frame
+// edge but is far taller than the outline is an overshot span,
+// not a cut-off card — 'unknown' (no chip), NEVER 'corners'.
+check('outline: overstretched rows strip touching the frame edge -> unknown, NEVER corners', (() => { const r = assessFraming({ l: 0, t: 0.148, w: 1, h: 0.85, mode: 'rows' }, goodLum, outline); return !r.framed && r.reason === 'unknown'; })());
+// The aspect floor: perspective tilt only ever makes a card look
+// SHORTER (aspect larger), so a box far too tall for its width is
+// an overstated span, not a tilted card — rejected outright.
+// 0.43 x 0.90 rect on a square stream: expanded aspect ~0.56,
+// inside the old window (0.515-0.931) but below the 0.58 floor.
+const tallThin = makeImage(100, 100, (x, y) => (x >= 28 && x < 71 && y >= 5 && y < 95 ? [220, 40, 40] : [100, 100, 100]));
+check('tall-thin box (aspect below the 0.58 floor) -> null, not a box on the table', analyzeCardPixels(tallThin, 100, 100, 100, 100) === null);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
