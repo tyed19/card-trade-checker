@@ -6,7 +6,7 @@
 // native Camera plugin is strictly a fallback; the picker is terminal.
 //
 //   node scripts/test-preview-route.mjs
-import { captureEntry, afterPreviewAutoFail } from '../lib/capture-route.js';
+import { captureEntry, afterPreviewAutoFail, handoffNotice } from '../lib/capture-route.js';
 
 let pass = 0, fail = 0;
 const check = (label, got, want) => {
@@ -31,6 +31,23 @@ check('preview autofail browser -> picker', afterPreviewAutoFail({ isNative: fal
 // with a camera take the same primary path.
 check('preview is shell-independent when GUM exists',
   captureEntry({ isNative: true, hasGetUserMedia: true }) === captureEntry({ isNative: false, hasGetUserMedia: true }) ? 'same' : 'diff', 'same');
+
+// Automatic camera handoff must never be silent (2026-10-26 Android
+// field report: system camera, tiny/far card, blur-gate rejection, no
+// idea the preview had failed). The banner names the failure and
+// carries framing guidance the dumb camera never shows.
+const generic = handoffNotice({});
+check('generic handoff names a failed start', generic.title, "The in-app camera couldn't start");
+check('generic handoff guides framing', generic.guidance,
+  "Your phone's camera will open instead. Get close — fill the frame with the card, all four corners showing — and hold still.");
+check('generic handoff has no settings line', generic.settings, null);
+const denied = handoffNotice({ denied: true });
+check('denied handoff names the block', denied.title, 'Camera is blocked for FairSwap');
+check('denied handoff gives the settings path', denied.settings,
+  'Allow Camera in Settings → FairSwap → Camera to use the in-app camera.');
+const noApi = handoffNotice({ noApi: true });
+check('no-api handoff names unavailability', noApi.title, "The in-app camera isn't available here");
+check('no-api handoff still guides framing', noApi.guidance, generic.guidance);
 
 console.log(`\npreview-route: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

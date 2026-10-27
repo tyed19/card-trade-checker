@@ -145,6 +145,11 @@ input[type='file'] { display: none; }
   background: #14213d; color: #fff; font-size: 14px; font-weight: 900; white-space: nowrap;
 }
 .camNotice button.camNoticeX { background: transparent; color: #14213d; padding: 8px; font-size: 18px; }
+/* Camera-handoff banner: same yellow notice, stacked lines (the
+   base .camNotice is a row) + a button row, so the failure name and
+   the framing guidance both read before the phone's camera opens. */
+.camNotice.camHandoff { flex-direction: column; align-items: stretch; }
+.camNotice.camHandoff .camHandoffRow { display: flex; gap: 10px; align-items: center; }
 
 /* Tap-to-focus reticle: native-style square at the tap point, fading
    out on its own. Pure confirmation UI — the focus attempt itself

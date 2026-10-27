@@ -15,7 +15,7 @@ import * as store from '../lib/store';
 import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, fmtPriceLine, priceCoverage, tradeIsUnpriceable, FAIR_BAND } from '../lib/logic';
 import { decodePayload } from '../lib/links';
 import { takeNativePhoto, verdictHaptic, isNative } from '../lib/native';
-import { captureEntry, afterPreviewAutoFail } from '../lib/capture-route';
+import { captureEntry, afterPreviewAutoFail, handoffNotice } from '../lib/capture-route';
 import { prepareForUpload, assessBitmap } from '../lib/capture';
 import CameraPreview from './camera-preview';
 
@@ -246,6 +246,18 @@ export default function Home() {
   // Shape: { side, second, denied } or null. Cleared on the next
   // capture attempt.
   const [camNotice, setCamNotice] = useState(null);
+  // Camera-handoff interstitial: set whenever an AUTOMATIC fallback
+  // is about to open the phone's dumb camera (native intent or the
+  // capture file input after a preview failure), so the failure is
+  // named and the framing guidance lands BEFORE the user shoots —
+  // never silently mid-flight. Shape: { side, second,
+  // kind: 'native' | 'picker', denied, noApi } or null. The handoff
+  // fires only on the user's "Open camera" tap; "Never mind" closes
+  // it with nothing opened (same cancel semantics as backing out of
+  // the camera itself). Deliberate escapes (the preview's "Use photo
+  // picker instead", the camNotice's "Pick a photo") stay immediate:
+  // the user already chose to leave, so there is nothing to explain.
+  const [camHandoff, setCamHandoff] = useState(null);
   const entryPath = () => {
     try {
       return captureEntry({ isNative: isNative(), hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) });
@@ -382,6 +394,7 @@ export default function Home() {
     // this keeps capture in-app instead of handing off to the phone's
     // camera app (or Lens). Native plugin only when the preview
     // can't run; picker is terminal.
+    setCamHandoff(null);
     const path = entryPath();
     // RESET continuation: when this side already banked progress
     // (a shot that read some signals but not enough for choices),
@@ -401,9 +414,11 @@ export default function Home() {
       return;
     }
     if (path === 'native') {
-      const shot = await takeNativePhoto();
-      if (shot === 'cancelled') return;
-      if (shot) { onPhoto(side, shot, cont); return; }
+      // No getUserMedia here at all: stop at the handoff banner
+      // (names the failure + framing guidance) instead of silently
+      // opening the phone's camera.
+      setCamHandoff({ side, second: cont, kind: 'native', denied: false, noApi: true });
+      return;
     }
     if (cont) secondPhotoPick.current[side] = true;
     fileRefs[side].current && fileRefs[side].current.click();
@@ -437,11 +452,33 @@ export default function Home() {
     if (!preview) return;
     const { side, second } = preview;
     setPreview(null);
+    const denied = reason === 'NotAllowedError' || reason === 'SecurityError';
+    // Either automatic fallback opens a dumb camera, so both stop at
+    // the handoff banner first — the failure gets named and the
+    // framing guidance lands before the user shoots. (Previously
+    // both fired immediately and silently: that is exactly how the
+    // Android field report happened — system camera, tiny/far card,
+    // blur-gate rejection, no idea the preview had failed.)
     if (afterPreviewAutoFail({ isNative: isNative() }) === 'native') {
+      setCamHandoff({ side, second, kind: 'native', denied, noApi: false });
+      return;
+    }
+    setCamHandoff({ side, second, kind: 'picker', denied, noApi: false });
+  }
+
+  // The handoff banner's "Open camera": fire the stored fallback now
+  // that the user has seen the failure + framing guidance. A plugin
+  // cancel closes with nothing opened; a plugin miss falls through
+  // to the existing camNotice (Settings path back + picker button).
+  async function onCamHandoffOpen() {
+    if (!camHandoff) return;
+    const { side, second, kind, denied } = camHandoff;
+    setCamHandoff(null);
+    if (kind === 'native') {
       const shot = await takeNativePhoto();
       if (shot === 'cancelled') return;
       if (shot) { onPhoto(side, shot, second); return; }
-      setCamNotice({ side, second, denied: reason === 'NotAllowedError' || reason === 'SecurityError' });
+      setCamNotice({ side, second, denied });
       return;
     }
     if (second) secondPhotoPick.current[side] = true;
@@ -466,11 +503,10 @@ export default function Home() {
   // the tilt-shot offer for hard fails.
   async function onSecondPhoto(side) {
     const path = entryPath();
-    if (path === 'preview') { setCamNotice(null); setPreview({ side, second: true }); return; }
+    if (path === 'preview') { setCamNotice(null); setCamHandoff(null); setPreview({ side, second: true }); return; }
     if (path === 'native') {
-      const shot = await takeNativePhoto();
-      if (shot === 'cancelled') return;
-      if (shot) { onPhoto(side, shot, true); return; }
+      setCamHandoff({ side, second: true, kind: 'native', denied: false, noApi: true });
+      return;
     }
     secondPhotoPick.current[side] = true;
     fileRefs[side].current && fileRefs[side].current.click();
@@ -989,6 +1025,19 @@ export default function Home() {
             : 'Camera didn\u2019t open — check Settings → FairSwap → Camera, or pick a photo instead.'}</span>
           <button onClick={onCamNoticePick}>Pick a photo</button>
           <button className="camNoticeX" onClick={() => setCamNotice(null)} aria-label="Dismiss">✕</button>
+        </div>
+      ) : null}
+      {camHandoff ? (
+        <div className="camNotice camHandoff" role="alertdialog" aria-label="Camera handoff">
+          <span>{handoffNotice({ denied: camHandoff.denied, noApi: camHandoff.noApi }).title}</span>
+          <span>{handoffNotice({ denied: camHandoff.denied, noApi: camHandoff.noApi }).guidance}</span>
+          {handoffNotice({ denied: camHandoff.denied, noApi: camHandoff.noApi }).settings
+            ? <span>{handoffNotice({ denied: camHandoff.denied, noApi: camHandoff.noApi }).settings}</span>
+            : null}
+          <div className="camHandoffRow">
+            <button onClick={onCamHandoffOpen}>Open camera</button>
+            <button className="camNoticeX" onClick={() => setCamHandoff(null)} aria-label="Never mind">✕</button>
+          </div>
         </div>
       ) : null}
       <h1 className="title"><IconSwap size={34} /> Card Trade Checker <IconSwap size={34} /></h1>
