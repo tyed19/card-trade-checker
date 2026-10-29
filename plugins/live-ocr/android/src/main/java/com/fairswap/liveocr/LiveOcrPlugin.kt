@@ -180,7 +180,11 @@ class LiveOcrPlugin : Plugin() {
                 LiveOcrSession.endSilently()
             }.onFailure { e ->
                 // Session stays alive so JS can retry or stopCamera.
-                call.reject("capture-failed", e)
+                // Result.onFailure hands us a Throwable, but
+                // PluginCall.reject(String, Exception) needs an
+                // Exception; fall back to the message for non-Exceptions.
+                if (e is Exception) call.reject("capture-failed", e)
+                else call.reject(e.message ?: "capture-failed")
             }
         }
         if (!started) {
