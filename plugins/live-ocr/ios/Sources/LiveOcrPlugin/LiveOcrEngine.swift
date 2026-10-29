@@ -186,7 +186,11 @@ final class LiveOcrEngine: NSObject {
                 return
             }
             let videoOutput = AVCaptureVideoDataOutput()
-            videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelBufferPixelFormatType_32BGRA]
+            // NOTE: the dictionary KEY is kCVPixelBufferPixelFormatTypeKey
+            // but the VALUE constant is kCVPixelFormatType_32BGRA (no
+            // "Buffer" in the value name) — the Buffer-spelled variant
+            // does not exist and fails CI with "cannot find in scope".
+            videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
             videoOutput.alwaysDiscardsLateVideoFrames = true
             videoOutput.setSampleBufferDelegate(self, queue: self.analysisQueue)
             if self.session.canAddOutput(videoOutput) { self.session.addOutput(videoOutput) }
@@ -544,7 +548,7 @@ final class LiveOcrEngine: NSObject {
         var output: CVPixelBuffer?
         let status = CVPixelBufferCreate(
             kCFAllocatorDefault, width, height,
-            kCVPixelBufferPixelFormatType_32BGRA, nil, &output)
+            kCVPixelFormatType_32BGRA, nil, &output)
         guard status == kCVReturnSuccess, let buffer = output else { return pixelBuffer }
         ciContext.render(scaled, to: buffer)
         return buffer
