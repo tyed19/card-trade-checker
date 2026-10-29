@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreImage
+import CoreVideo
 import UIKit
 import Vision
 
@@ -185,7 +186,7 @@ final class LiveOcrEngine: NSObject {
                 return
             }
             let videoOutput = AVCaptureVideoDataOutput()
-            videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelBufferType_32BGRA]
+            videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelBufferPixelFormatType_32BGRA]
             videoOutput.alwaysDiscardsLateVideoFrames = true
             videoOutput.setSampleBufferDelegate(self, queue: self.analysisQueue)
             if self.session.canAddOutput(videoOutput) { self.session.addOutput(videoOutput) }
@@ -543,7 +544,7 @@ final class LiveOcrEngine: NSObject {
         var output: CVPixelBuffer?
         let status = CVPixelBufferCreate(
             kCFAllocatorDefault, width, height,
-            kCVPixelBufferType_32BGRA, nil, &output)
+            kCVPixelBufferPixelFormatType_32BGRA, nil, &output)
         guard status == kCVReturnSuccess, let buffer = output else { return pixelBuffer }
         ciContext.render(scaled, to: buffer)
         return buffer

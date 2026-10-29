@@ -2,6 +2,14 @@ import AVFoundation
 import Capacitor
 import UIKit
 
+/// JSON-safe value: nil becomes NSNull. (A nil Optional wrapped in Any
+/// does not bridge to JSON null reliably, and `?? NSNull()` does not
+/// type-check against String?/Double? operands.)
+fileprivate func jsonValue<T>(_ value: T?) -> Any {
+    if let v = value { return v }
+    return NSNull()
+}
+
 // MARK: - Bridge contract (web agent builds against these exact names)
 //
 // Methods (jsName "LiveOcr"):
@@ -183,9 +191,9 @@ public class LiveOcrPlugin: CAPPlugin, CAPBridgedPlugin {
             // Explicit NSNull for absent values: a nil Optional wrapped
             // in Any does not bridge to JSON null reliably.
             let deviceOcr: [String: Any] = [
-                "name": stable.name ?? NSNull(),
-                "number": stable.number ?? NSNull(),
-                "script": stable.script?.rawValue ?? NSNull(),
+                "name": jsonValue(stable.name),
+                "number": jsonValue(stable.number),
+                "script": jsonValue(stable.script?.rawValue),
             ]
             call.resolve(["base64": base64, "deviceOcr": deviceOcr])
             // Teardown on capture (spec). No "closed" event: the capture()
@@ -249,7 +257,7 @@ extension LiveOcrPlugin: LiveOcrEngineDelegate {
         for obs in frame.observations {
             observations.append([
                 "text": obs.text,
-                "confidence": obs.confidence.map { Double($0) } ?? NSNull(),
+                "confidence": jsonValue(obs.confidence.map { Double($0) }),
                 "boundingBox": [
                     "x": Double(obs.box.minX),
                     "y": Double(obs.box.minY),
@@ -264,10 +272,10 @@ extension LiveOcrPlugin: LiveOcrEngineDelegate {
             "frameId": frame.frameId,
             "observations": observations,
             "stable": [
-                "name": frame.stableName ?? NSNull(),
-                "number": frame.stableNumber ?? NSNull(),
+                "name": jsonValue(frame.stableName),
+                "number": jsonValue(frame.stableNumber),
             ],
-            "sharpness": frame.sharpness ?? NSNull(),
+            "sharpness": jsonValue(frame.sharpness),
         ]
         if let box = frame.cardBox {
             payload["cardBox"] = [
