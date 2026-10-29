@@ -1,0 +1,30 @@
+{
+  "name": "@fairswap/live-ocr",
+  "version": "0.1.0",
+  "description": "FairSwap live-frame on-device OCR (Apple Vision / Google ML Kit) — local Capacitor plugin",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "dist/",
+    "ios/Sources/",
+    "Package.swift"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  },
+  "keywords": [
+    "capacitor",
+    "plugin",
+    "native"
+  ],
+  "license": "MIT",
+  "private": true
+}

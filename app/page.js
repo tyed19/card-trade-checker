@@ -16,6 +16,12 @@ import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness,
 import { decodePayload } from '../lib/links';
 import { takeNativePhoto, verdictHaptic, isNative } from '../lib/native';
 import { captureEntry, afterPreviewAutoFail, handoffNotice } from '../lib/capture-route';
+import {
+  isLiveOcrAvailable, startLiveCamera, stopLiveCamera,
+  addLiveOcrFrameListener, addLiveSnapRequestListener, addLiveClosedListener,
+  captureLivePhoto, livePhotoToFile, initialLiveOcrSession, liveOcrSessionStep,
+  getLiveOcrEnabled, setLiveOcrEnabled as persistLiveOcrEnabled,
+} from '../lib/live-ocr';
 import { prepareForUpload, assessBitmap } from '../lib/capture';
 import CameraPreview from './camera-preview';
 
@@ -263,6 +269,100 @@ export default function Home() {
       return captureEntry({ isNative: isNative(), hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) });
     } catch { return 'picker'; }
   };
+  // Live on-device OCR native camera (grown-ups testing only): OFF by
+  // default per the spec rollout — the WebView preview remains the
+  // default until the beta gate passes per platform. Persisted in
+  // localStorage; loaded once on mount (state starts false so the
+  // first render matches the server). captureDiag is the grown-ups
+  // diagnostic line (in-memory React state only, never stored or
+  // transmitted): which capture path was chosen and why.
+  const [liveOcrOn, setLiveOcrOn] = useState(false);
+  const [captureDiag, setCaptureDiag] = useState(null);
+  useEffect(() => { try { setLiveOcrOn(getLiveOcrEnabled()); } catch { /* stay off */ } }, []);
+  function onLiveOcrToggle(on) {
+    setLiveOcrOn(on);
+    persistLiveOcrEnabled(on);
+  }
+  // Active native camera session, if any: { side, second, stage,
+  // locked, state, capturing, handles }. The native screen draws the
+  // outline and guidance itself; JS only owns the firing decision
+  // over ocrFrame events and the post-capture upload. Kid flow adds
+  // no text here — guidance stays native-side.
+  const liveSessionRef = useRef(null);
+  async function closeNativeSession() {
+    const sess = liveSessionRef.current;
+    liveSessionRef.current = null;
+    if (sess) {
+      for (const h of sess.handles) {
+        try { await h?.remove?.(); } catch { /* ignore */ }
+      }
+    }
+    try { await stopLiveCamera(); } catch { /* ignore */ }
+  }
+  async function openNativeCamera(side, second, stage, locked) {
+    await closeNativeSession();
+    const lockedFlags = locked
+      ? { picture: !!locked.picture, name: !!locked.name, number: !!locked.number }
+      : { picture: false, name: false, number: false };
+    const started = await startLiveCamera({ stage: stage || null, locked: lockedFlags });
+    if (!started) return false;
+    const sess = {
+      side, second, stage: stage || null, locked: lockedFlags,
+      state: initialLiveOcrSession(Date.now()), capturing: false, handles: [],
+    };
+    liveSessionRef.current = sess;
+    const onFrame = (frame) => {
+      const cur = liveSessionRef.current;
+      if (!cur || cur !== sess) return;
+      const { state, fire } = liveOcrSessionStep(cur.state, frame, Date.now());
+      cur.state = state;
+      if (fire) doNativeCapture(sess);
+    };
+    // Manual SNAP bypasses every firing rule, as today.
+    const onSnap = () => {
+      if (liveSessionRef.current === sess) doNativeCapture(sess);
+    };
+    // Closed = cancel path: tear down defensively, return to the
+    // trade screen, open NOTHING on top (no fallback picker).
+    const onClosed = () => {
+      if (liveSessionRef.current === sess) closeNativeSession();
+    };
+    sess.handles = [
+      await addLiveOcrFrameListener(onFrame),
+      await addLiveSnapRequestListener(onSnap),
+      await addLiveClosedListener(onClosed),
+    ].filter(Boolean);
+    if (!sess.handles.length) {
+      await closeNativeSession();
+      return false;
+    }
+    return true;
+  }
+  async function doNativeCapture(sess) {
+    const cur = liveSessionRef.current;
+    if (!cur || cur !== sess || sess.capturing) return;
+    sess.capturing = true;
+    const shot = await captureLivePhoto();
+    const { side, second, stage, locked } = sess;
+    await closeNativeSession();
+    if (!shot) {
+      // Plugin failure mid-session: fall back to the WebView preview
+      // path, never to a silent system-camera drop.
+      setCaptureDiag({ path: 'webview', reason: 'live-capture-failed' });
+      setPreview({ side, second, stage: stage || null, locked: locked || null });
+      return;
+    }
+    let file = null;
+    try { file = livePhotoToFile(shot.base64); } catch { file = null; }
+    if (!file) {
+      setCaptureDiag({ path: 'webview', reason: 'live-capture-failed' });
+      setPreview({ side, second, stage: stage || null, locked: locked || null });
+      return;
+    }
+    // The File feeds the EXISTING upload pipeline unchanged; the
+    // device reads ride along as hints only (see onPhoto).
+    onPhoto(side, file, second, shot.deviceOcr || null);
+  }
 
   // ---- Phase 3 state: views, per-side kid assignment, pickers ----
   const binderState = useStoreState();
@@ -406,6 +506,24 @@ export default function Home() {
     // flag so they merge evidence too.
     const s = sides[side];
     const cont = !!(s.progress && !(s.choices && s.choices.length) && !s.busy);
+    // Live on-device OCR native screen: chosen ONLY when the shell
+    // is native AND the grown-ups toggle is ON AND the plugin
+    // reports supported. Every other case falls through to the
+    // current WebView preview path unchanged below; a plugin failure
+    // falls back the same way (never a silent system-camera drop).
+    if (isNative() && liveOcrOn) {
+      const avail = await isLiveOcrAvailable();
+      if (avail.supported) {
+        setCaptureDiag({ path: 'native', reason: null });
+        const opened = await openNativeCamera(side, cont, cont ? s.progress.missing : null, cont ? s.progress : null);
+        if (opened) return;
+        setCaptureDiag({ path: 'webview', reason: 'live-ocr-failed' });
+      } else {
+        setCaptureDiag({ path: 'webview', reason: avail.reason || 'no-camera' });
+      }
+    } else {
+      setCaptureDiag({ path: 'webview', reason: isNative() ? 'toggle-off' : 'browser' });
+    }
     if (path === 'preview') {
       setCamNotice(null);
       setPreview(cont
@@ -502,6 +620,22 @@ export default function Home() {
   // as a continuation (see onPhotoButton), so this button is only
   // the tilt-shot offer for hard fails.
   async function onSecondPhoto(side) {
+    const s = sides[side];
+    const hasProgress = !!(s.progress && !(s.choices && s.choices.length) && !s.busy);
+    // Same native-screen gate as the photo button: a second shot
+    // reopens the native screen with the banked stage + locked fill
+    // when progress exists, and falls back to the preview otherwise.
+    if (isNative() && liveOcrOn) {
+      const avail = await isLiveOcrAvailable();
+      if (avail.supported) {
+        setCaptureDiag({ path: 'native', reason: null });
+        const opened = await openNativeCamera(side, true, hasProgress ? s.progress.missing : null, hasProgress ? s.progress : null);
+        if (opened) return;
+        setCaptureDiag({ path: 'webview', reason: 'live-ocr-failed' });
+      } else {
+        setCaptureDiag({ path: 'webview', reason: avail.reason || 'no-camera' });
+      }
+    }
     const path = entryPath();
     if (path === 'preview') { setCamNotice(null); setCamHandoff(null); setPreview({ side, second: true }); return; }
     if (path === 'native') {
@@ -512,7 +646,7 @@ export default function Home() {
     fileRefs[side].current && fileRefs[side].current.click();
   }
 
-  async function onPhoto(side, file, withPrior = false) {
+  async function onPhoto(side, file, withPrior = false, deviceOcr = null) {
     if (!file) return;
     // New scan, new sequence: any response still in flight for this
     // side belongs to an older photo and must never write state again.
@@ -559,6 +693,10 @@ export default function Home() {
       const form = new FormData();
       form.append('photo', upload);
       if (cropped) form.append('cropped', '1');
+      // On-device OCR hints (native screen only): per-shot, never
+      // stored — the server merges them as prior-evidence hints and
+      // its own reading still decides. Absent on WebView/picker shots.
+      if (deviceOcr) form.append('deviceOcr', JSON.stringify(deviceOcr));
       if (withPrior && lastOcrRef.current[side]) {
         form.append('priorOcr', JSON.stringify(lastOcrRef.current[side]));
         // RESET capture-success flags, derived from the banked
@@ -1272,6 +1410,18 @@ export default function Home() {
               )}
             </p>
             {grownTradeCtx && verdict && verdict.ruleNote && <p style={{ opacity: 0.9 }}><IconScales size={17} /> {verdict.ruleNote}</p>}
+            <div style={{ marginTop: 12 }}>
+              <label>
+                <input type="checkbox" checked={liveOcrOn} onChange={(e) => onLiveOcrToggle(e.target.checked)} />{' '}
+                Live on-device camera (grown-ups testing only — stays off until the beta gate passes per platform)
+              </label>
+              {captureDiag && (
+                <p style={{ opacity: 0.85 }}>
+                  Last capture path (this note lives only on this screen — it is never stored or sent anywhere): {captureDiag.path}
+                  {captureDiag.reason ? ` — ${captureDiag.reason}` : ' — native screen'}
+                </p>
+              )}
+            </div>
             <ParentLayer onOpenBinder={(kidId) => {
               store.setActiveKid(kidId);
               setGrownFrom(null);

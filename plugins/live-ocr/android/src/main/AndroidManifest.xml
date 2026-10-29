@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- CAMERA is already declared by the shell app; re-declaring it here
+         adds no new permission, it just makes this plugin self-describing.
+         No other permission is requested anywhere in the OCR path, and
+         the OCR path performs no network I/O. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <application>
+        <activity
+            android:name="com.fairswap.liveocr.LiveOcrActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density" />
+    </application>
+</manifest>

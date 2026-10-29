@@ -3,6 +3,7 @@ import { getStageStats } from '../../../lib/ocr';
 import { findCandidates } from '../../../lib/identify';
 import { identifyPhoto, NUMBER_CORNER_HINT, applyCornerShotRule } from '../../../lib/hybrid';
 import { summarizeProgress, deadlineRetake } from '../../../lib/progress';
+import { mergeDeviceOcrIntoPriorOcr } from '../../../lib/live-ocr.js';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -35,6 +36,21 @@ export async function POST(req) {
       const rawPrior = form.get('priorOcr');
       if (typeof rawPrior === 'string' && rawPrior) priorOcr = JSON.parse(rawPrior);
     } catch { priorOcr = null; }
+    // On-device OCR hints: the native camera screen's stable reads
+    // ride along as prior-evidence HINTS in exactly the priorOcr
+    // shape (see lib/live-ocr.js). The pipeline merges them with its
+    // own reads the same way it merges a first photo's evidence —
+    // the gates, tripwire, tie guard, and corner-shot rule below all
+    // still apply, and a hint that disagrees with every candidate is
+    // simply ignored. Device hints NEVER suppress the server's own
+    // reading and NEVER create a choice by themselves. Unparseable
+    // input is ignored, never fatal.
+    try {
+      const rawDevice = form.get('deviceOcr');
+      if (typeof rawDevice === 'string' && rawDevice) {
+        priorOcr = mergeDeviceOcrIntoPriorOcr(priorOcr, JSON.parse(rawDevice));
+      }
+    } catch { /* bad deviceOcr: run the current pipeline unchanged */ }
     // Capture overhaul: the client sends cropped=1 when the upload is
     // already a tight high-quality card crop — the pipeline must NOT
     // re-encode it (that second JPEG pass crushed text reads).
@@ -98,6 +114,10 @@ export async function POST(req) {
     // agreeing (see applyCornerShotRule). Applied BEFORE the
     // confidence verdict below, so a demoted offer becomes the
     // honest retake instead. Full-card shots skip this entirely.
+    // Device hints ride inside priorOcr (merged above), so a
+    // deviceOcr-driven candidate is subject to this rule exactly
+    // like any other corner candidate: a glare-misread device number
+    // with no agreeing name never becomes an offer.
     if (cornerCloseup) {
       const cornerNames = [
         ...((priorOcr && priorOcr.nameGuesses) || []),
