@@ -14,16 +14,15 @@ import {
 import * as store from '../lib/store';
 import { spareCopies, autoBalance, verdictKind, fairnessBand, normalizeFairness, fmtCushion, fmtPriceLine, priceCoverage, tradeIsUnpriceable, FAIR_BAND } from '../lib/logic';
 import { decodePayload } from '../lib/links';
-import { takeNativePhoto, verdictHaptic, isNative } from '../lib/native';
-import { captureEntry, afterPreviewAutoFail, handoffNotice } from '../lib/capture-route';
+import { verdictHaptic, isNative } from '../lib/native';
 import {
   isLiveOcrAvailable, startLiveCamera, stopLiveCamera,
   addLiveOcrFrameListener, addLiveSnapRequestListener, addLiveClosedListener,
   captureLivePhoto, livePhotoToFile, initialLiveOcrSession, liveOcrSessionStep,
-  getLiveOcrEnabled, setLiveOcrEnabled as persistLiveOcrEnabled,
+  getLiveOcrEnabled, setLiveOcrEnabled as persistLiveOcrEnabled, LIVE_OCR_STORAGE_KEY,
 } from '../lib/live-ocr';
 import { prepareForUpload, assessBitmap } from '../lib/capture';
-import CameraPreview from './camera-preview';
+import CaptureScreen from './capture-screen';
 
 const DEMO = {
   mine: {
@@ -224,15 +223,15 @@ export default function Home() {
   // The hidden file input is shared by normal and second-photo picks:
   // this flag tells its onChange which kind the next pick is.
   const secondPhotoPick = useRef({ mine: false, theirs: false });
-  // Live guided preview (native camera preview): null, or
-  // { side, second, stage }. The preview runs wherever getUserMedia
-  // exists — including inside the native shell (see
-  // lib/capture-route.js). The native Camera plugin is strictly a
-  // fallback: its ACTION_IMAGE_CAPTURE intent can resolve to Google
-  // Lens on some Android phones. `stage` is progressive capture's
-  // missing piece ('number' | 'tilt' | 'straight' | null): the
-  // preview highlights just that piece (the number stage grows and
-  // pulses the two bottom-edge dots) and is otherwise unchanged.
+  // WebView capture screen state (the SECOND capture path, after
+  // the native screen): null, or { side, second, stage, locked }.
+  // The screen runs wherever getUserMedia exists — including inside
+  // the native shell, as the fallback when the native screen is
+  // off or unavailable. `stage` is progressive capture's missing
+  // piece ('number' | 'tilt' | 'straight' | null) and `locked` the
+  // banked outline fill; the screen pulses only the missing
+  // segment. It never opens another camera: failure reports
+  // onError, which lands on the capture-error screen.
   const [preview, setPreview] = useState(null);
   // Warm again when the capture preview opens: the identify call
   // follows seconds later, and a fresh ping right before it beats a
@@ -246,39 +245,39 @@ export default function Home() {
     if (!preview) return;
     try { fetch('/api/warm').catch(() => {}); } catch { /* ignore */ }
   }, [preview]);
-  // Camera-failure notice: set when the preview AND (in the shell)
-  // the native-plugin fallback both missed, so the failure is named
-  // with the way back instead of silently dropping to the picker.
-  // Shape: { side, second, denied } or null. Cleared on the next
-  // capture attempt.
-  const [camNotice, setCamNotice] = useState(null);
-  // Camera-handoff interstitial: set whenever an AUTOMATIC fallback
-  // is about to open the phone's dumb camera (native intent or the
-  // capture file input after a preview failure), so the failure is
-  // named and the framing guidance lands BEFORE the user shoots —
-  // never silently mid-flight. Shape: { side, second,
-  // kind: 'native' | 'picker', denied, noApi } or null. The handoff
-  // fires only on the user's "Open camera" tap; "Never mind" closes
-  // it with nothing opened (same cancel semantics as backing out of
-  // the camera itself). Deliberate escapes (the preview's "Use photo
-  // picker instead", the camNotice's "Pick a photo") stay immediate:
-  // the user already chose to leave, so there is nothing to explain.
-  const [camHandoff, setCamHandoff] = useState(null);
-  const entryPath = () => {
-    try {
-      return captureEntry({ isNative: isNative(), hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) });
-    } catch { return 'picker'; }
-  };
-  // Live on-device OCR native camera (grown-ups testing only): OFF by
-  // default per the spec rollout — the WebView preview remains the
-  // default until the beta gate passes per platform. Persisted in
-  // localStorage; loaded once on mount (state starts false so the
-  // first render matches the server). captureDiag is the grown-ups
+  // Capture-failure screen: set when BOTH capture paths failed —
+  // native screen unavailable/failed AND the WebView screen could
+  // not start (no camera, denied permission, no API). Shape:
+  // { side, second, reason } or null. Cleared on the next capture
+  // attempt. The screen offers Retry + a REAL photo picker — never
+  // a trip to the phone's dumb camera. (The 2026-10-26 handoff
+  // banner and its "Open camera" button are gone with the rewrite:
+  // a banner-approved dumb camera still cannot auto-capture, and
+  // its tiny/far shots are exactly what the field reports hated.)
+  const [captureError, setCaptureError] = useState(null);
+  // Last firing-block reason from the active capture screen
+  // ('settling' | 'not-sharp' | 'waiting-text' | 'no-box' |
+  // 'need-streak' | null), for the grown-ups diagnostic line only:
+  // in-memory React state, never stored or transmitted. This is what
+  // turns the next "never fires" report from a shrug into a reason.
+  const [captureBlocked, setCaptureBlocked] = useState(null);
+  // Live on-device OCR native camera: the DEFAULT capture path in
+  // the shell since the 2026-10-31 rewrite — the old default-OFF
+  // trap is what made Tye test the old preview by accident for days
+  // while believing he was testing the native screen. Persisted in
+  // localStorage; when nothing is stored yet, the shell defaults ON
+  // and a browser defaults OFF. The toggle remains as an explicit
+  // override (off = WebView screen). captureDiag is the grown-ups
   // diagnostic line (in-memory React state only, never stored or
   // transmitted): which capture path was chosen and why.
   const [liveOcrOn, setLiveOcrOn] = useState(false);
   const [captureDiag, setCaptureDiag] = useState(null);
-  useEffect(() => { try { setLiveOcrOn(getLiveOcrEnabled()); } catch { /* stay off */ } }, []);
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(LIVE_OCR_STORAGE_KEY);
+      setLiveOcrOn(stored !== null ? stored === '1' : isNative());
+    } catch { try { setLiveOcrOn(isNative()); } catch { /* stay off */ } }
+  }, []);
   function onLiveOcrToggle(on) {
     setLiveOcrOn(on);
     persistLiveOcrEnabled(on);
@@ -314,8 +313,11 @@ export default function Home() {
     const onFrame = (frame) => {
       const cur = liveSessionRef.current;
       if (!cur || cur !== sess) return;
-      const { state, fire } = liveOcrSessionStep(cur.state, frame, Date.now());
+      const { state, fire, blocked } = liveOcrSessionStep(cur.state, frame, Date.now());
       cur.state = state;
+      // Block reason feeds the grown-ups diagnostic line (throttled
+      // by change-only updates: frames arrive ~5x/second).
+      setCaptureBlocked((prev) => (prev === blocked ? prev : blocked));
       if (fire) doNativeCapture(sess);
     };
     // Manual SNAP bypasses every firing rule, as today.
@@ -484,38 +486,27 @@ export default function Home() {
     setTradedDone(false);
   }
 
-  // Photo button: inside the native shell, use the real camera
-  // plugin (better capture, no file-picker detour); in a browser —
-  // or if the plugin fails for any reason — click the hidden file
-  // input exactly as before. A cancelled camera is a no-op, never a
-  // fallback (the kid just changed their mind).
-  async function onPhotoButton(side) {
-    // Guided preview first everywhere it exists — inside the shell
-    // this keeps capture in-app instead of handing off to the phone's
-    // camera app (or Lens). Native plugin only when the preview
-    // can't run; picker is terminal.
-    setCamHandoff(null);
-    const path = entryPath();
-    // RESET continuation: when this side already banked progress
-    // (a shot that read some signals but not enough for choices),
-    // the SAME button re-opens the SAME preview — with the banked
-    // pieces as outline fill and the missing piece pulsing — and
-    // the shot carries the banked OCR (second: true). There is no
-    // separate continuation screen anymore; the button IS the way
-    // back in. Native/picker paths thread the same continuation
-    // flag so they merge evidence too.
-    const s = sides[side];
-    const cont = !!(s.progress && !(s.choices && s.choices.length) && !s.busy);
-    // Live on-device OCR native screen: chosen ONLY when the shell
-    // is native AND the grown-ups toggle is ON AND the plugin
-    // reports supported. Every other case falls through to the
-    // current WebView preview path unchanged below; a plugin failure
-    // falls back the same way (never a silent system-camera drop).
+  // ONE capture route (2026-10-31 rewrite) — native screen FIRST,
+  // WebView screen SECOND, error screen THIRD. There is no fourth
+  // step and no system-camera step at all: when both in-app screens
+  // fail, the kid gets an error screen with Retry + a real photo
+  // picker, and nothing opens the phone's dumb camera on any path.
+  // (The old route — preview → native-plugin intent → handoff
+  // banner → "Open camera" — is deleted: a banner-approved dumb
+  // camera still cannot auto-capture, and its tiny/far shots are
+  // exactly what the Android field reports kept showing.)
+  async function openCapture(side, second, stage, locked) {
+    setCaptureError(null);
+    setCaptureBlocked(null);
+    // Native screen: the default in the shell unless the grown-ups
+    // toggle explicitly turned it off, and only when the plugin
+    // reports supported. Any other case falls through to the
+    // WebView screen below — never to another camera.
     if (isNative() && liveOcrOn) {
       const avail = await isLiveOcrAvailable();
       if (avail.supported) {
         setCaptureDiag({ path: 'native', reason: null });
-        const opened = await openNativeCamera(side, cont, cont ? s.progress.missing : null, cont ? s.progress : null);
+        const opened = await openNativeCamera(side, second, stage, locked);
         if (opened) return;
         setCaptureDiag({ path: 'webview', reason: 'live-ocr-failed' });
       } else {
@@ -524,22 +515,28 @@ export default function Home() {
     } else {
       setCaptureDiag({ path: 'webview', reason: isNative() ? 'toggle-off' : 'browser' });
     }
-    if (path === 'preview') {
-      setCamNotice(null);
-      setPreview(cont
-        ? { side, second: true, stage: s.progress.missing, locked: s.progress }
-        : { side, second: false });
+    // WebView screen: it checks getUserMedia itself and reports
+    // onError when it cannot start, which lands on the error screen.
+    // When there is no getUserMedia API at all, skip straight there.
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      setPreview({ side, second, stage: stage || null, locked: locked || null });
       return;
     }
-    if (path === 'native') {
-      // No getUserMedia here at all: stop at the handoff banner
-      // (names the failure + framing guidance) instead of silently
-      // opening the phone's camera.
-      setCamHandoff({ side, second: cont, kind: 'native', denied: false, noApi: true });
-      return;
-    }
-    if (cont) secondPhotoPick.current[side] = true;
-    fileRefs[side].current && fileRefs[side].current.click();
+    setCaptureError({ side, second, reason: 'no-camera-api' });
+  }
+
+  // Photo button. Continuation: when this side already banked
+  // progress (a shot that read some signals but not enough for
+  // choices), the SAME button re-opens the capture screen — with the
+  // banked pieces as outline fill and the missing piece pulsing —
+  // and the shot carries the banked OCR (second: true). There is no
+  // separate continuation screen; the button IS the way back in.
+  // Native and WebView paths thread the same continuation flag so
+  // they merge evidence too.
+  async function onPhotoButton(side) {
+    const s = sides[side];
+    const cont = !!(s.progress && !(s.choices && s.choices.length) && !s.busy);
+    await openCapture(side, cont, cont ? s.progress.missing : null, cont ? s.progress : null);
   }
 
   function onPreviewCapture(file) {
@@ -549,7 +546,11 @@ export default function Home() {
     onPhoto(side, file, second);
   }
 
-  function onPreviewFallback() {
+  // The screen's "Use photo picker instead": a deliberate escape, so
+  // it opens the REAL photo picker immediately (the file input no
+  // longer carries capture="environment" — that attribute is what
+  // turned every old picker escape into a system-camera trip).
+  function onPreviewPickPhoto() {
     if (!preview) return;
     const { side, second } = preview;
     setPreview(null);
@@ -557,56 +558,27 @@ export default function Home() {
     fileRefs[side].current && fileRefs[side].current.click();
   }
 
-  // The preview itself failed (no camera, denied permission, no API):
-  // in the shell, retry via the native plugin before giving up; in a
-  // browser the picker is the only fallback. A plugin cancel means
-  // the kid backed out — never open the picker on top. In the shell,
-  // when the plugin ALSO misses, name the failure with a small
-  // notice (Settings path back + picker button) instead of silently
-  // dropping to the picker — a silent fallback reads as "the app is
-  // broken". The notice is general robustness: a denial is only one
-  // possible cause, and the text says so.
-  async function onPreviewAutoFail(reason) {
+  // The WebView screen itself failed (no camera, denied permission,
+  // no API): land on the error screen. Retry re-runs the whole
+  // route (native first again); "Choose a photo" is the real picker.
+  function onPreviewError(reason) {
     if (!preview) return;
     const { side, second } = preview;
     setPreview(null);
-    const denied = reason === 'NotAllowedError' || reason === 'SecurityError';
-    // Either automatic fallback opens a dumb camera, so both stop at
-    // the handoff banner first — the failure gets named and the
-    // framing guidance lands before the user shoots. (Previously
-    // both fired immediately and silently: that is exactly how the
-    // Android field report happened — system camera, tiny/far card,
-    // blur-gate rejection, no idea the preview had failed.)
-    if (afterPreviewAutoFail({ isNative: isNative() }) === 'native') {
-      setCamHandoff({ side, second, kind: 'native', denied, noApi: false });
-      return;
-    }
-    setCamHandoff({ side, second, kind: 'picker', denied, noApi: false });
+    setCaptureError({ side, second, reason });
   }
 
-  // The handoff banner's "Open camera": fire the stored fallback now
-  // that the user has seen the failure + framing guidance. A plugin
-  // cancel closes with nothing opened; a plugin miss falls through
-  // to the existing camNotice (Settings path back + picker button).
-  async function onCamHandoffOpen() {
-    if (!camHandoff) return;
-    const { side, second, kind, denied } = camHandoff;
-    setCamHandoff(null);
-    if (kind === 'native') {
-      const shot = await takeNativePhoto();
-      if (shot === 'cancelled') return;
-      if (shot) { onPhoto(side, shot, second); return; }
-      setCamNotice({ side, second, denied });
-      return;
-    }
-    if (second) secondPhotoPick.current[side] = true;
-    fileRefs[side].current && fileRefs[side].current.click();
+  function onCaptureErrorRetry() {
+    if (!captureError) return;
+    const { side, second } = captureError;
+    setCaptureError(null);
+    openCapture(side, second, null, null);
   }
 
-  function onCamNoticePick() {
-    if (!camNotice) return;
-    const { side, second } = camNotice;
-    setCamNotice(null);
+  function onCaptureErrorPick() {
+    if (!captureError) return;
+    const { side, second } = captureError;
+    setCaptureError(null);
     if (second) secondPhotoPick.current[side] = true;
     fileRefs[side].current && fileRefs[side].current.click();
   }
@@ -622,28 +594,11 @@ export default function Home() {
   async function onSecondPhoto(side) {
     const s = sides[side];
     const hasProgress = !!(s.progress && !(s.choices && s.choices.length) && !s.busy);
-    // Same native-screen gate as the photo button: a second shot
-    // reopens the native screen with the banked stage + locked fill
-    // when progress exists, and falls back to the preview otherwise.
-    if (isNative() && liveOcrOn) {
-      const avail = await isLiveOcrAvailable();
-      if (avail.supported) {
-        setCaptureDiag({ path: 'native', reason: null });
-        const opened = await openNativeCamera(side, true, hasProgress ? s.progress.missing : null, hasProgress ? s.progress : null);
-        if (opened) return;
-        setCaptureDiag({ path: 'webview', reason: 'live-ocr-failed' });
-      } else {
-        setCaptureDiag({ path: 'webview', reason: avail.reason || 'no-camera' });
-      }
-    }
-    const path = entryPath();
-    if (path === 'preview') { setCamNotice(null); setCamHandoff(null); setPreview({ side, second: true }); return; }
-    if (path === 'native') {
-      setCamHandoff({ side, second: true, kind: 'native', denied: false, noApi: true });
-      return;
-    }
-    secondPhotoPick.current[side] = true;
-    fileRefs[side].current && fileRefs[side].current.click();
+    // Same single route as the photo button: a second shot reopens
+    // the native screen with the banked stage + locked fill when
+    // progress exists, else the WebView screen, else the error
+    // screen. No path here opens another camera.
+    await openCapture(side, true, hasProgress ? s.progress.missing : null, hasProgress ? s.progress : null);
   }
 
   async function onPhoto(side, file, withPrior = false, deviceOcr = null) {
@@ -1054,11 +1009,14 @@ export default function Home() {
             )}
           </div>
         )}
+        {/* NOTE: no capture="environment" here — that attribute turned
+            every picker escape into a system-camera trip, which is
+            how the app kept landing in a dumb camera that cannot
+            auto-capture. This input is a REAL photo picker now. */}
         <input
           ref={fileRefs[side]}
           type="file"
           accept="image/*"
-          capture="environment"
           onChange={(e) => { const second = secondPhotoPick.current[side]; secondPhotoPick.current[side] = false; onPhoto(side, e.target.files && e.target.files[0], second); e.target.value = ''; }}
         />
         <button className="photoBtn" disabled={s.busy} onClick={() => onPhotoButton(side)}>
@@ -1156,25 +1114,17 @@ export default function Home() {
 
   return (
     <main>
-      {camNotice ? (
-        <div className="camNotice" role="status">
-          <span>{camNotice.denied
-            ? 'Camera is blocked — allow Camera in Settings → FairSwap → Camera, or pick a photo instead.'
-            : 'Camera didn\u2019t open — check Settings → FairSwap → Camera, or pick a photo instead.'}</span>
-          <button onClick={onCamNoticePick}>Pick a photo</button>
-          <button className="camNoticeX" onClick={() => setCamNotice(null)} aria-label="Dismiss">✕</button>
-        </div>
-      ) : null}
-      {camHandoff ? (
-        <div className="camNotice camHandoff" role="alertdialog" aria-label="Camera handoff">
-          <span>{handoffNotice({ denied: camHandoff.denied, noApi: camHandoff.noApi }).title}</span>
-          <span>{handoffNotice({ denied: camHandoff.denied, noApi: camHandoff.noApi }).guidance}</span>
-          {handoffNotice({ denied: camHandoff.denied, noApi: camHandoff.noApi }).settings
-            ? <span>{handoffNotice({ denied: camHandoff.denied, noApi: camHandoff.noApi }).settings}</span>
-            : null}
-          <div className="camHandoffRow">
-            <button onClick={onCamHandoffOpen}>Open camera</button>
-            <button className="camNoticeX" onClick={() => setCamHandoff(null)} aria-label="Never mind">✕</button>
+      {captureError ? (
+        <div className="camNotice camError" role="alert" aria-label="Camera couldn't start">
+          <span>{captureError.reason === 'NotAllowedError' || captureError.reason === 'SecurityError'
+            ? 'Camera is blocked for FairSwap — allow Camera in Settings → FairSwap → Camera, then try again.'
+            : captureError.reason === 'no-camera-api'
+              ? "This device has no in-app camera — choose a photo instead."
+              : "The in-app camera couldn't start — try again, or choose a photo instead."}</span>
+          <div className="camErrorRow">
+            <button onClick={onCaptureErrorRetry}>Try again</button>
+            <button onClick={onCaptureErrorPick}>Choose a photo</button>
+            <button className="camNoticeX" onClick={() => setCaptureError(null)} aria-label="Dismiss">✕</button>
           </div>
         </div>
       ) : null}
@@ -1413,12 +1363,13 @@ export default function Home() {
             <div style={{ marginTop: 12 }}>
               <label>
                 <input type="checkbox" checked={liveOcrOn} onChange={(e) => onLiveOcrToggle(e.target.checked)} />{' '}
-                Live on-device camera (grown-ups testing only — stays off until the beta gate passes per platform)
+                Native on-device camera (turn off to use the web preview instead)
               </label>
               {captureDiag && (
                 <p style={{ opacity: 0.85 }}>
                   Last capture path (this note lives only on this screen — it is never stored or sent anywhere): {captureDiag.path}
                   {captureDiag.reason ? ` — ${captureDiag.reason}` : ' — native screen'}
+                  {captureBlocked ? ` — blocked: ${captureBlocked}` : ''}
                 </p>
               )}
             </div>
@@ -1431,13 +1382,14 @@ export default function Home() {
         </div>
       )}
       {preview ? (
-        <CameraPreview
+        <CaptureScreen
           stage={preview.stage || null}
           locked={preview.locked || null}
           onCapture={onPreviewCapture}
           onClose={() => setPreview(null)}
-          onFallback={onPreviewFallback}
-          onAutoFail={onPreviewAutoFail}
+          onPickPhoto={onPreviewPickPhoto}
+          onError={onPreviewError}
+          onBlockReason={(blocked) => setCaptureBlocked((prev) => (prev === blocked ? prev : blocked))}
         />
       ) : null}
     </main>

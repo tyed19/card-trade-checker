@@ -131,9 +131,9 @@ input[type='file'] { display: none; }
    element must never sit stream-less on screen (Android WebView
    paints its grey play glyph over it). */
 .camUploading { position: relative; color: #fff; font-size: 24px; font-weight: 900; }
-/* Small camera-failure notice: the preview failed and every fallback
-   missed too, so the failure must be NAMED with the way back —
-   never a silent drop to the picker. One line, dismissible. */
+/* Small camera-failure notice: BOTH in-app capture paths failed, so
+   the failure must be NAMED with the way back — Retry or a real
+   photo picker. Never a silent drop to another camera. */
 .camNotice {
   position: sticky; top: 0; z-index: 80; display: flex; gap: 10px; align-items: center;
   background: #ffcb05; color: #14213d; border-radius: 12px; padding: 10px 12px;
@@ -145,15 +145,16 @@ input[type='file'] { display: none; }
   background: #14213d; color: #fff; font-size: 14px; font-weight: 900; white-space: nowrap;
 }
 .camNotice button.camNoticeX { background: transparent; color: #14213d; padding: 8px; font-size: 18px; }
-/* Camera-handoff banner: same yellow notice, stacked lines (the
-   base .camNotice is a row) + a button row, so the failure name and
-   the framing guidance both read before the phone's camera opens. */
-.camNotice.camHandoff { flex-direction: column; align-items: stretch; }
-.camNotice.camHandoff .camHandoffRow { display: flex; gap: 10px; align-items: center; }
+/* Capture-error box: same yellow notice, stacked lines (the base
+   .camNotice is a row) + a button row — Retry, real photo picker,
+   dismiss. The 2026-10-26 handoff banner is deleted with the
+   rewrite: no button here opens the phone's camera. */
+.camNotice.camError { flex-direction: column; align-items: stretch; }
+.camNotice.camError .camErrorRow { display: flex; gap: 10px; align-items: center; }
 
 /* Tap-to-focus reticle: native-style square at the tap point, fading
    out on its own. Pure confirmation UI — the focus attempt itself
-   is a track-constraint toggle (see app/camera-preview.js), and on
+   is a track-constraint toggle (see app/capture-screen.js), and on
    platforms that ignore focusMode the reticle is all the tap does. */
 .camFocusRing {
   position: absolute; width: 76px; height: 76px;

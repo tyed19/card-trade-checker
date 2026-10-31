@@ -171,23 +171,34 @@ const frame = (id, over = {}) => ({
   check('older frame ignored', [older.fire, older.state.lastFrameId], [null, 5]);
 }
 {
-  // Backstop: 13 consecutive sharp boxed frames (~2.6s at 200ms)
-  // fire even with no text read at all; a broken streak restarts.
+  // Backstop under the SINGLE firing rule (lib/capture-fire.js):
+  // 3 consecutive sharp boxed frames fire even with no text read
+  // at all; a soft frame restarts the streak; a missing box does
+  // NOT reset it — the streak counts sharp frames, and the 13-frame
+  // hold below is what rescues a detector blind spot.
   let s = initialLiveOcrSession(1000);
   let fired = null;
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 2; i++) {
     const r = liveOcrSessionStep(s, frame(i, { sharpness: 500 }), 2000 + i * 200);
     s = r.state;
     fired = r.fire;
   }
-  check('no backstop fire at 12 sharp frames', fired, null);
-  const r13 = liveOcrSessionStep(s, frame(12, { sharpness: 500 }), 2000 + 12 * 200);
-  check('backstop fires at 13 sharp boxed frames', r13.fire, 'backstop');
-  // A frame without a card box breaks the streak.
+  check('no backstop fire at 2 sharp frames', fired, null);
+  const r3 = liveOcrSessionStep(s, frame(2, { sharpness: 500 }), 2000 + 2 * 200);
+  check('backstop fires at 3 sharp boxed frames', r3.fire, 'backstop');
+  // A frame without a card box keeps the streak counting.
   let s2 = initialLiveOcrSession(1000);
-  for (let i = 0; i < 5; i++) s2 = liveOcrSessionStep(s2, frame(i, { sharpness: 500 }), 2000 + i * 200).state;
-  const broken = liveOcrSessionStep(s2, frame(5, { cardBox: null, sharpness: 500 }), 3000);
-  check('missing card box resets backstop streak', broken.state.sharpStreak, 0);
+  for (let i = 0; i < 5; i++) s2 = liveOcrSessionStep(s2, frame(i, { cardBox: null, sharpness: 500 }), 2000 + i * 200).state;
+  check('missing card box keeps sharp streak counting', s2.sharpStreak, 5);
+  // Hold: 13 consecutive sharp frames with NO box still fire.
+  let s3 = initialLiveOcrSession(1000);
+  let holdFired = null;
+  for (let i = 0; i < 13; i++) {
+    const r = liveOcrSessionStep(s3, frame(i, { cardBox: null, sharpness: 500 }), 2000 + i * 200);
+    s3 = r.state;
+    holdFired = r.fire;
+  }
+  check('backstop-hold fires at 13 sharp boxless frames', holdFired, 'backstop');
 }
 {
   // Toggle: OFF by default outside a browser (no window here).
