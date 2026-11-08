@@ -23734,3 +23734,179 @@
 {"id":"30th-c-030","titles":["Expert Splasher"],"hp":30}
 {"id":"30th-c-025","titles":["Steel Wing","Cross-Cut"],"hp":120}
 {"id":"30th-c-023","titles":["Brilliant Arrow"],"hp":210}
+{"id":"mep-092","titles":[],"hp":null}
+{"id":"mee-012","titles":[],"hp":null}
+{"id":"mee-013","titles":[],"hp":null}
+{"id":"mee-011","titles":[],"hp":null}
+{"id":"mep-090","titles":["Dusk Raid","Abyss Eye"],"hp":280}
+{"id":"mep-091","titles":["Sky Transport","Ryuno Glide"],"hp":370}
+{"id":"mee-009","titles":[],"hp":null}
+{"id":"mee-016","titles":[],"hp":null}
+{"id":"mep-089","titles":["Thunderous Fist","Zepto Turn"],"hp":270}
+{"id":"mep-093","titles":["Scrappy Spark"],"hp":70}
+{"id":"mee-014","titles":[],"hp":null}
+{"id":"mee-010","titles":[],"hp":null}
+{"id":"det1-25","titles":[],"hp":null}
+{"id":"mee-015","titles":[],"hp":null}
+{"id":"mep-099","titles":["Stealthy Slash","Aqua Edge"],"hp":300}
+{"id":"mep-100","titles":["Colorful Harmony"],"hp":270}
+{"id":"mep-101","titles":["Share Happiness","Bite"],"hp":90}
+{"id":"mep-102","titles":["Call for Family","V-Flame"],"hp":80}
+{"id":"mep-103","titles":["Rapid Draw","Electrobullet"],"hp":110}
+{"id":"mep-106","titles":["Surprisingly Transform"],"hp":70}
+{"id":"mep-105","titles":["Psychic"],"hp":60}
+{"id":"mep-107","titles":["Pika-Pika Parade","Thunderbolt"],"hp":190}
+{"id":"mep-108","titles":["Solar Beatdown"],"hp":260}
+{"id":"mep-109","titles":["Zip-Zap Frenzy","Thunder"],"hp":190}
+{"id":"mep-110","titles":["Lunatic Claw"],"hp":270}
+{"id":"mep-120","titles":[],"hp":null}
+{"id":"30th-B","titles":["Psychic"],"hp":60}
+{"id":"mep-096","titles":["Fiery Flapping","Fire Spin"],"hp":120}
+{"id":"mep-098","titles":["Flash-Pop Flapping","Thundering Lightning"],"hp":120}
+{"id":"mep-095","titles":["Aura Sphere"],"hp":120}
+{"id":"30th-G","titles":["Psychic"],"hp":60}
+{"id":"mep-094","titles":["Scale Up","Mega Drain"],"hp":150}
+{"id":"mep-097","titles":["Frosty Flapping","Hail"],"hp":120}
+{"id":"30th-R","titles":["Psychic"],"hp":60}
+{"id":"me06-001","titles":["Spike Draw","High Horsepower"],"hp":130}
+{"id":"me06-002","titles":["Multiply","Bug Bite"],"hp":50}
+{"id":"me06-003","titles":["Frightening Pattern","Bug Out"],"hp":110}
+{"id":"me06-004","titles":["Knock Away"],"hp":70}
+{"id":"me06-005","titles":["Linear Attack","Punishing Needles"],"hp":130}
+{"id":"mep-104","titles":["Empower","Psydrive"],"hp":130}
+{"id":"me06-006","titles":["Fade Out","Bug Out"],"hp":50}
+{"id":"me06-007","titles":["Pierce","Clean Hit"],"hp":120}
+{"id":"me06-008","titles":["Overrun"],"hp":80}
+{"id":"me06-009","titles":["Double Draw","Solar Beam"],"hp":120}
+{"id":"me06-010","titles":["Punk Out","Ram"],"hp":70}
+{"id":"me06-011","titles":["Finishing Blow","Quadruple Hold"],"hp":340}
+{"id":"me06-012","titles":["Play Rough"],"hp":70}
+{"id":"me06-013","titles":["Slash"],"hp":90}
+{"id":"me06-017","titles":["Slippery Oil","Mega Drain"],"hp":150}
+{"id":"me06-015","titles":["Spray Fluid"],"hp":60}
+{"id":"me06-014","titles":["Magical Bullet"],"hp":320}
+{"id":"me06-018","titles":["Roar","Rear Kick"],"hp":80}
+{"id":"me06-019","titles":["Fervent Fang","Heat Tackle"],"hp":150}
+{"id":"me06-016","titles":["Leaf Step"],"hp":90}
+{"id":"me06-020","titles":["Gather Strength","Combustion"],"hp":90}
+{"id":"me06-021","titles":["Buddy Boost","Heat Crash"],"hp":140}
+{"id":"me06-022","titles":["Searing Flame","Combustion Blast"],"hp":130}
+{"id":"me06-023","titles":["Rewarm","Strong Flare"],"hp":190}
+{"id":"me06-024","titles":["Destructive Flame"],"hp":110}
+{"id":"me06-025","titles":["Make Waves","Bubble Drain"],"hp":110}
+{"id":"me06-026","titles":["Waterfall","Brutal Whirlpool"],"hp":150}
+{"id":"me06-027","titles":["Hook"],"hp":80}
+{"id":"me06-028","titles":["Deep Sea Draw","Gentle Slap"],"hp":120}
+{"id":"me06-029","titles":["Oceanic Gain","Hydro Splash"],"hp":260}
+{"id":"me06-030","titles":["Call for Family","Headbutt"],"hp":90}
+{"id":"me06-031","titles":["Body Slam","Voltaic Hammer"],"hp":140}
+{"id":"me06-032","titles":["Tackle","Thunderbolt"],"hp":110}
+{"id":"me06-033","titles":["Thunder-Clad","Power Rush"],"hp":200}
+{"id":"me06-034","titles":["Thunder Shock"],"hp":80}
+{"id":"me06-035","titles":["Incarnate Solidarity","Thunderous Edge"],"hp":120}
+{"id":"me06-036","titles":["Energy Crush"],"hp":80}
+{"id":"me06-037","titles":["Quick Attack"],"hp":60}
+{"id":"me06-038","titles":["Electro Ball"],"hp":90}
+{"id":"me06-039","titles":["Generator's Touch","Electric Punch"],"hp":150}
+{"id":"me06-040","titles":["Agility"],"hp":60}
+{"id":"me06-041","titles":["Raid","Speed Dive"],"hp":120}
+{"id":"me06-042","titles":["Claw Slash","Flashing Bolt"],"hp":120}
+{"id":"me06-043","titles":["Pound"],"hp":80}
+{"id":"me06-044","titles":["Mind Ruler","Hypnoblast"],"hp":120}
+{"id":"me06-046","titles":["Light Punch"],"hp":90}
+{"id":"me06-045","titles":["Chaos Crawler"],"hp":130}
+{"id":"me06-047","titles":["Restricted Activation","Goliath's Punch"],"hp":350}
+{"id":"me06-048","titles":["Incarnate Solidarity","Rising Heart"],"hp":120}
+{"id":"me06-049","titles":["Ascension"],"hp":60}
+{"id":"me06-050","titles":["Counterattack Quills","Digging Claw"],"hp":110}
+{"id":"me06-051","titles":["Guard Press"],"hp":120}
+{"id":"me06-052","titles":["High Density Armor","Tough Swing"],"hp":190}
+{"id":"me06-053","titles":["Strength","Brutal Lands"],"hp":150}
+{"id":"me06-054","titles":["Incarnate Solidarity","Gaia Crush"],"hp":130}
+{"id":"me06-055","titles":["Find a Friend","Gnaw"],"hp":60}
+{"id":"me06-057","titles":["Maternal Call","Giga Impact"],"hp":170}
+{"id":"me06-056","titles":["Tackle"],"hp":90}
+{"id":"me06-059","titles":["Tormenting Poison","Stealthy Sting"],"hp":100}
+{"id":"me06-060","titles":["Lure Out","Ominous Eyes"],"hp":80}
+{"id":"me06-058","titles":["Poison Sting","Bug Out"],"hp":60}
+{"id":"me06-061","titles":["Ambush"],"hp":70}
+{"id":"me06-062","titles":["Crunch"],"hp":120}
+{"id":"me06-063","titles":["Shadow-Clad","Dark Cutter"],"hp":120}
+{"id":"me06-064","titles":["Dig Claws"],"hp":60}
+{"id":"me06-065","titles":["Follow-Up Claw","Slash"],"hp":110}
+{"id":"me06-066","titles":["Stampede","Scratch"],"hp":70}
+{"id":"me06-067","titles":["Riotous Beating","Slashing Strike"],"hp":270}
+{"id":"me06-068","titles":["Knock Off"],"hp":60}
+{"id":"me06-069","titles":["Psychic Marionette","Eerie Wave"],"hp":320}
+{"id":"me06-071","titles":["Corkscrew Punch","Deadly Whip"],"hp":130}
+{"id":"me06-070","titles":["Call for Family","Slap"],"hp":80}
+{"id":"me06-072","titles":["Drag Off","Claw Slash"],"hp":120}
+{"id":"me06-079","titles":["Energizing Present","Beat"],"hp":90}
+{"id":"me06-073","titles":["Hard Head"],"hp":70}
+{"id":"me06-080","titles":["Bouncy-Bounce Charge"],"hp":30}
+{"id":"me06-078","titles":["Nap","Headbutt"],"hp":70}
+{"id":"me06-076","titles":["Bite","Break Through"],"hp":120}
+{"id":"me06-081","titles":["Run Around","Peck"],"hp":50}
+{"id":"me06-082","titles":["Cottony Carrier","Flap"],"hp":110}
+{"id":"me06-083","titles":["Colorful Whip"],"hp":90}
+{"id":"me06-077","titles":["Raging Horns"],"hp":130}
+{"id":"me06-074","titles":["Double Smash"],"hp":100}
+{"id":"me06-087","titles":["Clutch"],"hp":80}
+{"id":"me06-075","titles":["Beat Scales","Hammer In"],"hp":160}
+{"id":"me06-085","titles":["Incarnate Solidarity","Corkscrew Dive"],"hp":110}
+{"id":"me06-090","titles":[],"hp":null}
+{"id":"me06-088","titles":["Excited Dive","Talon Hunt"],"hp":280}
+{"id":"me06-091","titles":[],"hp":null}
+{"id":"me06-092","titles":[],"hp":null}
+{"id":"me06-093","titles":[],"hp":null}
+{"id":"me06-094","titles":[],"hp":null}
+{"id":"me06-095","titles":[],"hp":null}
+{"id":"me06-086","titles":["Surprise Attack"],"hp":60}
+{"id":"me06-096","titles":[],"hp":null}
+{"id":"me06-097","titles":[],"hp":null}
+{"id":"me06-098","titles":[],"hp":null}
+{"id":"me06-099","titles":[],"hp":null}
+{"id":"me06-101","titles":[],"hp":null}
+{"id":"me06-100","titles":["Delta Gift"],"hp":null}
+{"id":"me06-102","titles":[],"hp":null}
+{"id":"me06-103","titles":[],"hp":null}
+{"id":"me06-104","titles":["Frightening Pattern","Bug Out"],"hp":110}
+{"id":"me06-105","titles":["Play Rough"],"hp":70}
+{"id":"me06-106","titles":["Roar","Rear Kick"],"hp":80}
+{"id":"me06-107","titles":["Buddy Boost","Heat Crash"],"hp":140}
+{"id":"me06-084","titles":["Ruler's Roar","Storm Emerald"],"hp":280}
+{"id":"me06-089","titles":[],"hp":null}
+{"id":"me06-108","titles":["Body Slam","Voltaic Hammer"],"hp":140}
+{"id":"me06-109","titles":["Energy Crush"],"hp":80}
+{"id":"me06-110","titles":["Incarnate Solidarity","Rising Heart"],"hp":120}
+{"id":"me06-111","titles":["Strength","Brutal Lands"],"hp":150}
+{"id":"me06-112","titles":["Stampede","Scratch"],"hp":70}
+{"id":"me06-113","titles":["Knock Off"],"hp":60}
+{"id":"me06-114","titles":["Nap","Headbutt"],"hp":70}
+{"id":"me06-115","titles":["Bouncy-Bounce Charge"],"hp":30}
+{"id":"me06-116","titles":["Cottony Carrier","Flap"],"hp":110}
+{"id":"me06-117","titles":["Colorful Whip"],"hp":90}
+{"id":"me06-118","titles":["Finishing Blow","Quadruple Hold"],"hp":340}
+{"id":"me06-119","titles":["Rewarm","Strong Flare"],"hp":190}
+{"id":"me06-120","titles":["Oceanic Gain","Hydro Splash"],"hp":260}
+{"id":"me06-121","titles":["Thunder-Clad","Power Rush"],"hp":200}
+{"id":"me06-123","titles":["Psychic Marionette","Eerie Wave"],"hp":320}
+{"id":"me06-122","titles":["Restricted Activation","Goliath's Punch"],"hp":350}
+{"id":"me06-128","titles":[],"hp":null}
+{"id":"me06-127","titles":[],"hp":null}
+{"id":"me06-129","titles":[],"hp":null}
+{"id":"me06-130","titles":[],"hp":null}
+{"id":"me06-131","titles":[],"hp":null}
+{"id":"me06-132","titles":[],"hp":null}
+{"id":"me06-133","titles":[],"hp":null}
+{"id":"me06-134","titles":[],"hp":null}
+{"id":"me06-135","titles":["Finishing Blow","Quadruple Hold"],"hp":340}
+{"id":"me06-124","titles":["Excited Dive","Talon Hunt"],"hp":280}
+{"id":"me06-125","titles":[],"hp":null}
+{"id":"me06-126","titles":[],"hp":null}
+{"id":"me06-136","titles":["Thunder-Clad","Power Rush"],"hp":200}
+{"id":"me06-137","titles":["Restricted Activation","Goliath's Punch"],"hp":350}
+{"id":"me06-141","titles":["Ruler's Roar","Storm Emerald"],"hp":280}
+{"id":"me06-138","titles":["Ruler's Roar","Storm Emerald"],"hp":280}
+{"id":"me06-139","titles":[],"hp":null}
+{"id":"me06-140","titles":[],"hp":null}
