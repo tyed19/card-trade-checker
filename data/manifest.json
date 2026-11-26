@@ -1,5 +1,5 @@
 {
-  "builtAt": "2026-11-25T19:44:59.040Z",
+  "builtAt": "2026-11-26T19:37:23.127Z",
   "model": "Xenova/clip-vit-base-patch32",
   "dims": 512,
   "indexVectors": 26030,
@@ -19,7 +19,7 @@
   },
   "files": {
     "catalog-en.json": 5500650,
-    "catalog-ja.json": 2800536,
+    "catalog-ja.json": 2800509,
     "index-full.bin": 13327360,
     "index-full.json": 2834383,
     "index-full.scales.json": 550635
